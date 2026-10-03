@@ -1,0 +1,3028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MILOMONITOR PRO</title>
+
+<link rel="icon" type="image/x-icon" href="fav.jpg">
+
+    
+    <style>
+    /* --- RESET & FONTS --- */
+    :root {
+        --ecg-green: #00ff00;
+        --spo2-blue: #00ffff;
+        --art-red: #ff3333;
+        --resp-yellow: #ffff00;
+        --cvp-cyan: #00ffff;
+        --nbp-orange: #ffae00;
+        --bg-black: #000000;
+    }
+    alarm-msg{font-family:'consolas', monospace;}
+
+    body {
+        background-color: #000;
+        height: 100vh;
+        width: 100vw;
+        margin: 0;
+        overflow: hidden;
+        font-family: 'Consolas', monospace;
+        user-select: none;
+    }
+
+    /* --- CONTAINER (Previously the Case) --- */
+    /* Now acts as a full-screen wrapper */
+    .monitor-case {
+        width: 100%;
+        height: 100%;
+        background: #000;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* --- HIDE PHYSICAL HARDWARE --- */
+    .handle, .model-tab, .bottom-branding { 
+        display: none !important; 
+    }
+
+    /* --- SCREEN BEZEL & LAYOUT --- */
+    .bezel {
+        flex: 1;
+        background: #000;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+    }
+
+    .screen {
+        background-color: var(--bg-black);
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+    }
+
+    #off-overlay {
+        position: absolute; top:0; left:0; width:100%; height:100%;
+        background: #080808; z-index: 100;
+    }
+
+    /* --- FLOATING CONTROLS (So you can still use the sim) --- */
+    
+    /* 1. Power Button (Floating Bottom Left) */
+    .power-group {
+        position: absolute;
+        bottom: 60px; /* Above SmartKeys */
+        left: 10px;
+        z-index: 200;
+        opacity: 0.5;
+        transition: opacity 0.3s;
+    }
+    .power-group:hover { opacity: 1; }
+    
+    .power-btn {
+        width: 30px; height: 30px; border-radius: 50%;
+        background: #333; border: 1px solid #666;
+        display: flex; justify-content:center; align-items:center;
+        color: #fff; font-size: 14px; cursor: pointer;
+    }
+    .led { display: none; } /* Hide LEDs for cleaner look */
+    .led#led-ac { display: block; width: 6px; height: 6px; margin-left: 5px; background: #555; border-radius: 50%; }
+    .led-on { background: #00ff00 !important; box-shadow: 0 0 5px #00ff00; }
+
+    /* 2. Menu Knob (Floating Bottom Right) */
+    .controls-panel {
+        position: absolute;
+        bottom: 60px; /* Above SmartKeys */
+        right: 10px;
+        width: auto;
+        padding: 0;
+        z-index: 200;
+        opacity: 0.5;
+        transition: opacity 0.3s;
+    }
+    .controls-panel:hover { opacity: 1; }
+
+    .knob-container { margin: 0; transform: scale(0.7); /* Smaller knob */ }
+    .knob {
+        width: 60px; height: 60px; border-radius: 50%;
+        background: #333; border: 2px solid #555;
+        box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        cursor: pointer; display: flex; justify-content: center; align-items: center;
+    }
+    .knob-inner { width: 30px; height: 30px; background: #666; border-radius: 50%; }
+    .knob-lbl { display: none; } /* Hide label */
+    .phys-btn { display: none; } /* Hide physical side buttons */
+
+    /* --- STANDARD INTERFACE ELEMENTS --- */
+/* --- CALCULATOR STYLES --- */
+.calculator-wrapper {
+    position: absolute;
+    bottom: 60px; /* Sits above the smart keys */
+    right: 20px;
+    width: 260px;
+    background: #222;
+    border: 2px solid #555;
+    border-radius: 8px;
+    padding: 10px;
+    display: none; /* Hidden by default */
+    z-index: 1000;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+
+.calculator-wrapper.active {
+    display: block;
+}
+
+.calc-display {
+    width: 100%;
+    height: 50px;
+    background: #000;
+    color: #00ff00; /* ECG Green */
+    text-align: right;
+    padding: 10px;
+    font-size: 24px;
+    border: 1px solid #444;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.calc-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+}
+
+.c-btn {
+    padding: 15px 5px;
+    background: #333;
+    color: white;
+    border: 1px solid #555;
+    cursor: pointer;
+    font-family: 'Consolas', monospace;
+    font-weight: bold;
+}
+
+.c-btn:hover { background: #444; }
+.c-btn.op { color: #ffae00; } /* NBP Orange for operators */
+.c-btn.eq { background: #0077be; } /* Blue for equals */
+    /* Top Bar */
+    .status-bar {
+        height: 35px; display: flex; justify-content: space-between;
+        align-items: center; padding: 0 10px; font-size: 16px;
+        color: #fff; background: #1a1a1a; border-bottom: 1px solid #444;
+    }
+    .alarm-banner {
+        flex: 1; text-align: center; font-weight: bold; font-size: 1.4rem;
+        color: black; margin: 0 15px; border-radius: 2px;
+    }
+    .alarm-red { background: #ff0000; color: white;  }
+    .alarm-yellow { background: #ffff00; color: black; }
+    .alarm-cyan { background: #00ffff; color: black; }
+
+
+    /* Sync Marker */
+    .sync-marker {
+        position: absolute; width: 6px; height: 6px; background: #ffffff;
+        border-radius: 50%; transform: translate(-50%, -50%);
+        box-shadow: 0 0 5px #fff; z-index: 10; pointer-events: none;
+    }
+    .sync-badge {
+        position: absolute; top: 45px; right: 220px;
+        background: white; color: black; padding: 2px 6px;
+        font-weight: bold; font-size: 12px; display: none; z-index: 50;
+    }
+
+    /* Main Grid */
+    .main-grid { flex: 1; display: flex; height: calc(100% - 85px); }
+
+    /* Left: Waveforms */
+    .wave-col {
+        flex: 3; display: flex; flex-direction: column;
+        border-right: 1px solid #333; height: 100%; background: #000;
+    }
+    #wave-container {
+        flex: 1; position: relative; width: 100%; overflow: hidden;
+        /* Subtle Grid */
+        background: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+        background-size: 50px 50px;
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+    .w-label { position: absolute; left: 5px; font-size: 14px; font-weight: bold; text-shadow: 1px 1px 0 #000; font-family: sans-serif;}
+
+    /* Sensor-not-attached overlays (ECG leads / SpO2 probe / NIBP cuff / EtCO2 probe) */
+    .wave-sensor-overlay {
+        position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,0.85);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        cursor: pointer; z-index: 15; text-align: center;
+    }
+    .wave-sensor-overlay .wso-msg {
+        color: #fff; font-weight: bold; font-family: sans-serif;
+        font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .wave-sensor-overlay .wso-sub {
+        color: #ccc; font-family: sans-serif; font-size: 10px; margin-top: 3px;
+    }
+    /* Message color matches each trace's waveform color */
+    .wave-sensor-overlay.ecg .wso-msg  { color: var(--ecg-green); }
+    .wave-sensor-overlay.spo2 .wso-msg { color: #ffff00; } /* Pleth trace is yellow */
+    .wave-sensor-overlay.co2 .wso-msg  { color: #ffffff; } /* CO2 trace is white */
+    .wave-sensor-overlay.nibp .wso-msg { color: #ff3333; } /* NIBP readout is red */
+
+    /* Bottom Row (NBP/Temp) */
+    .bottom-row {
+        height: 100px; display: flex; border-top: 1px solid #333;
+        background-color: #050505;
+    }
+    .bot-box {
+        flex: 1; padding: 5px 15px; border-right: 1px solid #333;
+        display: flex; flex-direction: column; justify-content: center; position: relative;
+    }
+    .b-label { font-size: 14px; font-weight: bold; position: absolute; top: 5px; left: 8px; }
+    .b-val   { font-size: 50px; line-height: 1; font-weight: 400; margin-top: 10px;  font-family: "B612", "Source Sans Pro", Arial, sans-serif;
+  font-weight: bold;
+  font-size: 64px; }
+    .b-sub   { font-size: 24px; opacity: 0.9; margin-left: 5px; font-family: 'Roboto Condensed', sans-serif; }
+    .b-time  { font-size: 12px; position: absolute; bottom: 5px; right: 10px; opacity: 0.7; font-family: sans-serif; }
+    .text-orange { color: var(--nbp-orange); } .text-green { color: var(--ecg-green); }
+
+    /* Right: Numerics */
+   /* --- Right: Numerics --- */
+/* --- Numerics Column Container --- */
+.num-col {
+    flex: 1;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #333;
+}
+
+.num-box {
+    flex: 1;
+    border-bottom: 1px solid #222;
+    padding: 8px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Pushes the big number to the bottom */
+}
+
+/* --- Labels and Limits (Top Left) --- */
+.n-header {
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.n-lbl {
+    font-size: 16px;
+    font-weight: 800;
+    font-family: sans-serif;
+    text-transform: uppercase;
+}
+
+.n-limits {
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 1.1;
+}
+
+/* --- Big Main Value --- */
+.n-val {
+   font-size: 76px; line-height: 0.9;
+    text-align: right;
+    font-family: "Arial Narrow", Arial, sans-serif;
+    font-weight: bold;
+    letter-spacing: -2px;
+}
+
+/* --- Color Classes (Matches your :root) --- */
+.box-hr { color: var(--ecg-green); }
+.box-spo2 { color: var(--spo2-blue); }
+.box-art { color: var(--art-red); }
+
+
+    /* SmartKeys (Bottom Bar) */
+    .smart-keys { height: 50px; background: #1a1a1a; display: flex; border-top: 1px solid #444; width: 100%; }
+       .s-key {
+            font-family: 'Consolas', Courier, monospace; flex: 1;
+            background: linear-gradient(to bottom, #b6b6b6, #c0bebe);
+            border-right: 1px solid #111; color: rgb(0, 0, 0);
+            font-size: 11px; text-align: center; display: flex;
+            align-items: center; justify-content: center; cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+    .s-key:active { background: #000; }
+    .s-key-yellow {
+        flex: 1; background: linear-gradient(to bottom, #ffd700, #daa520);
+        border-right: 1px solid #b8860b; color: black; font-size: 12px;
+        text-align: center; display: flex; align-items: center; justify-content: center;
+        cursor: pointer; font-weight: bold; font-family: sans-serif;
+    }
+     .s-key-blue {
+            flex: 1; background: blue;
+            border-right: 1px solid #005fa3; color: white; font-size: 11px;
+            text-align: center; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-weight: bold; font-family: 'consolas', monospace;
+        }
+
+    /* --- POPUPS & MENUS --- */
+    #trend-overlay {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 70%; height: 60%;
+        background: rgba(15, 15, 15, 0.95); border: 2px solid #555;
+        z-index: 500; display: none; padding: 20px; border-radius: 5px;
+    }
+    .trend-title { color: #ccc; font-family: sans-serif; font-size: 16px; border-bottom: 1px solid #444; margin-bottom: 10px; }
+
+    #scenario-popup {
+        position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+        width: 300px; background: #111; border: 2px solid #555; z-index: 600;
+        display: none; padding: 2px; box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    }
+    .scen-header { background: #0077be; color: white; padding: 8px; font-weight: bold; font-size: 14px; font-family: sans-serif;}
+    .scen-btn {
+        display: block; width: 100%; background: #222; color: #e0e0e0;
+        border: 1px solid #444; margin-bottom: 1px; padding: 10px; cursor: pointer;
+        text-align: left; font-size: 13px; font-family: sans-serif;
+    }
+    .scen-btn:hover { background: #444; color: white; }
+.calculator {
+    width: 320px;
+    background-color: var(--bg-color);
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+.display {
+    width: 100%;
+    height: 60px;
+    background: var(--display-bg);
+    color: var(--text-color);
+    text-align: right;
+    line-height: 60px;
+    padding: 0 15px;
+    font-size: 2rem;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.btn {
+    height: 60px;
+    border-radius: 12px;
+    border: none;
+    background: var(--btn-bg);
+    color: var(--text-color);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn:hover {
+    background: var(--btn-hover);
+}
+
+.operator {
+    color: var(--operator-color);
+    font-weight: bold;
+}
+
+.equal {
+    background: var(--operator-color);
+    color: white;
+}
+
+.equal:hover {
+    background: #e68e00;
+}
+   #sim-menu {
+        position: absolute; 
+        bottom: 80px; 
+        right: 20px;
+        background: rgba(20,20,20,0.98); 
+        padding: 12px;
+        border-radius: 8px; 
+        display: none; 
+        z-index: 999;
+        width: 280px; 
+        max-height: 70vh; /* Limits height to 70% of screen */
+        overflow-y: auto;  /* Adds scrollbar if too many meds */
+        border: 1px solid #666; 
+        font-family: sans-serif;
+        box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    }
+
+    /* Compact 3-column grid so more buttons fit */
+    .med-grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr 1fr; 
+        gap: 4px; 
+        margin-bottom: 15px; 
+    }
+
+    select.rhythm-select {
+        width: 100%; padding: 8px; background: #222; color: white;
+        border: 1px solid #555; font-size: 13px; margin-bottom: 10px;
+        border-radius: 4px; outline: none;
+    }
+    .med-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 10px; }
+    .med-btn {
+        background: #333; color: white; border: 1px solid #555;
+        padding: 8px 2px; font-size: 11px; cursor: pointer; border-radius: 4px;
+    }
+    .med-btn:hover { background: #555; }
+    .section-label { color: #aaa; font-size: 11px; margin-bottom: 4px; display: block; text-transform: uppercase; }
+    .close-btn { width: 100%; padding: 8px; background: #666; color: white; border: none; cursor: pointer; }
+    
+    .adjuster-box {
+        margin: 10px 0; text-align: center; border: 1px solid #555;
+        padding: 5px; background: #111; border-radius: 4px;
+    }
+    .step-btn {
+        width: 30px; height: 30px; background: #444; 
+        color: white; border: 1px solid #666; cursor: pointer; font-weight: bold;
+    }
+    #count-el { color: #00ffff; font-size: 18px; font-weight: bold; margin: 0 10px; }
+
+</style>
+</head>
+<body>
+
+    <div class="monitor-case">
+        <div class="handle"></div>
+        <div class="model-tab">MX450</div>
+
+        <!-- SCREEN CONTENT -->
+        <div class="bezel">
+            <div class="screen">
+                
+                <!-- OVERLAYS -->
+                <div id="off-overlay"></div>
+                
+                <div id="trend-overlay">
+                    <div class="trend-title">VITAL SIGNS TRENDS (Last 15 Mins)</div>
+                    <canvas id="trendCanvas" width="580" height="280"></canvas>
+                </div>
+
+                <!-- TOP BAR -->
+                <div class="status-bar">
+                    <div>ADULT &nbsp; BED 4</div>
+                    <div id="alarm-msg" class="alarm-banner"></div>
+                    <div id="clock">12:00</div>
+                </div>
+                
+                <!-- SYNC STATUS BADGE -->
+                <div id="sync-msg" class="sync-badge">SYNC</div>
+
+                <!-- MAIN DISPLAY -->
+                <div class="main-grid">
+                    <!-- LEFT COLUMN -->
+                    <div class="wave-col">
+                        <div id="wave-container">
+                            <canvas id="waves"></canvas>
+                            <div id="leads-overlay" class="wave-sensor-overlay ecg" style="top:0%; height:30%;" onclick="attachLeads()">
+                                <span class="wso-msg">ECG LEADS OFF</span><span class="wso-sub">Touch when leads placed</span>
+                            </div>
+                            <div id="spo2-wave-overlay" class="wave-sensor-overlay spo2" style="top:30%; height:27%;" onclick="attachSpo2()">
+                                <span class="wso-msg">SpO2 NO SENSOR</span><span class="wso-sub">Touch when probe attached</span>
+                            </div>
+                        </div>
+                        <div class="bottom-row">
+                            <div class="bot-box text-red">
+                                <span class="b-label">NBP <span style="font-weight:normal; font-size:11px; color:red;">Auto 15m</span></span>
+                                <div style="display: flex; align-items: baseline; color:red;">
+                                    <span class="b-val" id="b-nbp"></span>
+                                    <span class="b-sub" id="b-map">(93)</span>
+                                </div>
+                                <span class="b-time">12:00</span>
+                                <div id="nibp-overlay" class="wave-sensor-overlay nibp" onclick="attachNibp()">
+                                    <span class="wso-msg">NIBP NO CUFF</span><span class="wso-sub">Touch when probe attached</span>
+                                </div>
+                            </div>
+                            <div class="bot-box text-green">
+                                <span class="b-label">Tcore</span>
+                                <div style="display: flex; align-items: baseline;">
+                                    <span class="b-val" id="b-temp">37.0</span>
+                                    <div style="display:flex; flex-direction:column; margin-left:10px;">
+                                         <span style="font-size:14px; opacity:0.8;">Tskin</span><span style="font-size:16px;">36.5</span>
+                                    </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- Calculator UI Panel -->
+<div class="calculator-wrapper" id="calcWrapper">
+    <div class="calc-header">DRUG CALCULATOR</div>
+    <div class="calc-display-box" id="calc-display">0</div>
+    <div class="calc-grid">
+        <button class="c-btn op" onclick="clearCalc()">AC</button>
+        <button class="c-btn op" onclick="delCalc()">DEL</button>
+        <button class="c-btn op" onclick="pushCalc('/')">÷</button>
+        <button class="c-btn op" onclick="pushCalc('*')">×</button>
+        
+        <button class="c-btn" onclick="pushCalc('7')">7</button>
+        <button class="c-btn" onclick="pushCalc('8')">8</button>
+        <button class="c-btn" onclick="pushCalc('9')">9</button>
+        <button class="c-btn op" onclick="pushCalc('-')">-</button>
+        
+        <button class="c-btn" onclick="pushCalc('4')">4</button>
+        <button class="c-btn" onclick="pushCalc('5')">5</button>
+        <button class="c-btn" onclick="pushCalc('6')">6</button>
+        <button class="c-btn op" onclick="pushCalc('+')">+</button>
+        
+        <button class="c-btn" onclick="pushCalc('1')">1</button>
+        <button class="c-btn" onclick="pushCalc('2')">2</button>
+        <button class="c-btn" onclick="pushCalc('3')">3</button>
+        <button class="c-btn eq" onclick="runCalc()">=</button>
+        
+        <button class="c-btn" onclick="pushCalc('0')" style="grid-column: span 2;">0</button>
+        <button class="c-btn" onclick="pushCalc('.')">.</button>
+    </div>
+</div>
+
+                    <!-- RIGHT COLUMN -->
+                    <div class="num-col">
+                        <div class="num-box" style="color:#00FF00">
+                            <span class="n-lbl">HR</span><b><span class="n-lim">120<br>50</span></b><span class="n-val" id="val-hr">--</span>
+                        </div>
+                        <div class="num-box" style="color:yellow">
+                            <span class="n-lbl">SpO2</span><span class="n-lim">100<br>90</span><span class="n-val" id="val-spo2">--</span></span>
+                        </div>
+         <div class="num-box" style="color:var(--art-red)">
+                            <span class="n-lbl">ABP</span><span class="n-lim">160/90</span><span class="n-val" style="font-size:36px" id="val-abp">--/--</span><span class="n-sub">(93)</span>
+                        </div>
+
+                     
+                        
+                        <div class="num-box" style="color:white; border:none">
+       <span class="n-lbl">Etco2</span><span class="n-lim"><br></span><span class="n-val" id="val-co2">--</span></span>
+                        <div id="etco2-overlay" class="wave-sensor-overlay co2" onclick="attachEtco2()">
+                            <span class="wso-msg">EtCO2 NO SENSOR</span><span class="wso-sub">Touch when probe attached</span>
+                        </div>
+                        </div>
+                          <div class="num-box" style="color:white; border:none">
+       <span class="n-lbl">awRR</span><span class="n-lim"><br></span><span class="n-val" id="val-rr">--</span></span>
+                        
+                        </div>
+                        
+
+                     
+                    </div>
+                </div>
+
+                <!-- SMART KEYS -->
+                <div class="smart-keys">
+                    <div class="s-key-yellow" onclick="toggleSilence()">Silence</div>
+                    <div class="s-key">Alarms</div>
+                    
+                    <!-- SpO2 Stepper -->
+                    <div class="s-key" style="padding:0; display:flex; flex-direction:row;">
+                        <div onclick="adjSpO2(-1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">-</div>
+                        <div style="flex:2; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                            <span style="font-size:9px; color:#aaa;">SpO2</span>
+                            <p>SPO2</p>
+                        </div>
+                        <div onclick="adjSpO2(1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">+</div>
+                    </div>
+
+
+
+
+
+
+
+
+
+                    
+
+   <div class="s-key" style="padding:0; display:flex; flex-direction:row;">
+                        <div onclick="adjHr(-1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">-</div>
+                        <div style="flex:2; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                            <span style="font-size:9px; color:#aaa;">HR</span>
+                            <p>HR</p>
+                        </div>
+                        <div onclick="adjHr(1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">+</div>
+                    </div>
+<div class="s-key" style="padding:0; display:flex; flex-direction:row;">
+    <div style="flex:1; display:flex; flex-direction:column;">
+        <div onclick="adjABP(5, 0)" style="flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.2); border-bottom:1px solid rgba(255,255,255,0.1);">+</div>
+        <div onclick="adjABP(-5, 0)" style="flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.2);">-</div>
+    </div>
+
+    <div style="flex:2; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <span style="font-size:9px; color:#aaa;">ABP (S/D)</span>
+        <p id="bp-el" style="margin:0; font-size:14px;">120/80</p>
+    </div>
+
+    <div style="flex:1; display:flex; flex-direction:column;">
+        <div onclick="adjABP(0, 5)" style="flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.4); border-bottom:1px solid rgba(255,255,255,0.1);">+</div>
+        <div onclick="adjABP(0, -5)" style="flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.4);">-</div>
+    </div>
+</div>
+
+
+
+
+                        <!-- SpO2 Stepper -->
+                    <div class="s-key" style="padding:0; display:flex; flex-direction:row;">
+                        <div onclick="adjco2(-1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">-</div>
+                        <div style="flex:2; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                            <span style="font-size:9px; color:#aaa;">etco2</span>
+                            <p>etco2</p>
+                        </div>
+                        <div onclick="adjco2(1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">+</div>
+                    </div>
+
+
+
+
+    <div class="s-key" style="padding:0; display:flex; flex-direction:row;"> 
+        <div onclick="adjrr(-1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">-</div> 
+        
+        <div style="flex:2; display:flex; flex-direction:column; align-items:center; justify-content:center;"> 
+            <span style="font-size:9px; color:#aaa;">rr</span> 
+            <!-- Added id="count-el" so the script can find it -->
+            <p id="count-el">0</p> 
+        </div> 
+
+        <!-- Fixed function name from adrr to adjrr -->
+        <div onclick="adjrr(1)" style="flex:1; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; background:rgba(0,0,0,0.3);">+</div> 
+    </div>
+
+                    <div class="s-key" onclick="startNbp()">Start/<br>NBP</div>
+                    <div class="s-key">Zero<br>Press</div>
+<div class="s-key"><br>&gt&gt</div>
+                    
+                    <div class="s-key" onclick="performCardioversion()" style="color:cyan; font-weight:bold; border-left:2px solid cyan;">Sync<br>C.Vert</div>
+                    <div class="s-key" onclick="performDefib()" style="color:#ff4444; font-weight:bold; border-left:2px solid red;">Defib<br>Async</div>
+                    
+                    <!-- Sim Cases Button -->
+                    <div class="s-key" style="padding: 0; position: relative;">
+                        <select onchange="runScenario(this.value); this.selectedIndex=0;" 
+                                style="width: 100%; height: 100%; background: transparent; border: none; color: cyan; font-weight: bold; font-family: inherit; font-size: 11px; text-align: center; text-align-last: center; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none;">
+                            <option value="" disabled selected>Sim<br>Cases &#9660;</option>
+                            <option value="SCENARIO_SVT" style="color: black; background: white;">1. Unstable SVT</option>
+                            <option value="SCENARIO_OD" style="color: black; background: white;">2. Opioid Overdose</option>
+                            <option value="SCENARIO_MI" style="color: black; background: white;">3. STEMI -> Arrest</option>
+                            <option value="SCENARIO_CA" style="color: black; background: white;">4. Arrest</option>
+                            <option value="SCENARIO_SEPSIS" style="color: black; background: white;">5. Sepsis</option><option value="SCENARIO_ANAPHYLAXIS">5. Anaphylaxis</option>
+<option value="SCENARIO_HYPOVOLEMIA">6. Hypovolemic Shock (Trauma)</option>
+<option value="SCENARIO_CUSHING">7. Head Injury (Cushing's)</option>
+<option value="SCENARIO_BRADY">8. Symptomatic Bradycardia</option>
+<option value="SCENARIO_TORSADES">9. Torsades de Pointes</option>
+<option value="SCENARIO_HTN">10. Hypertensive Crisis</option>
+<option value="SCENARIO_BENZO">11. Benzo Overdose</option>
+<option value="SCENARIO_AFIB_RVR">12. AFib with RVR</option>
+<option value="SCENARIO_MH">13. Malignant Hyperthermia</option>
+<option value="SCENARIO_AIR_EMBOLISM">14. Air Embolism (VAE)</option>
+<option value="SCENARIO_LAST">15. Local Anesthetic Toxicity</option>
+<option value="SCENARIO_HIGH_SPINAL">16. High Spinal / Total Spinal</option>
+<option value="SCENARIO_STORM" style="color: white; background: #800;">17. Electrical Storm (Refractory VF)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="s-key">Monitor<br>Standby</div>
+<!-- Calculator S-Key -->
+<div class="s-key" onclick="toggleCalculator()" style="color: #444; font-weight: bold;">
+    Drug<br>Calc
+</div>
+
+   <!-- Toggle Button -->
+<!-- Calculator S-Key -->
+<div class="s-key" onclick="toggleCalculator()" style="color: #444; font-weight: bold;">
+    Drug<br>Calc
+</div><!-- Calculator S-Key -->
+<div class="s-key-blue" onclick="toggleTrends()" style="color: #444; font-weight: bold;">
+    Main<br>screen
+</div>
+              
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT CONTROLS -->
+        <div class="controls-panel">
+            <div class="phys-btn btn-yellow" onclick="toggleSilence()" title="Silence">&#128276;</div>
+            <div class="phys-btn btn-grey" title="Pause">||</div>
+            <div class="phys-btn btn-blue" onclick="toggleTrends()" title="Main Screen">&#8962;</div>
+            <div class="knob-container">
+                <div class="knob" onclick="toggleMenu()"><div class="knob-inner"></div></div>
+                <div class="knob-lbl">Trim Knob</div>
+            </div>
+        </div>
+
+       
+        <div class="power-group">
+            <div class="power-btn" onclick="powerOn()">&#x23FB;</div>
+            <div class="led" id="led-ac"></div>
+            <div class="led"></div>
+            <div class="led"></div>
+        </div>
+
+        <!-- FULLSCREEN TOGGLE (floating, top-right corner) -->
+        <div id="fs-btn" onclick="toggleFS()" title="Toggle Fullscreen"
+             style="position:absolute; top:8px; right:8px; z-index:300;
+                    width:30px; height:30px; border-radius:6px;
+                    background:rgba(40,40,40,0.6); border:1px solid #666;
+                    display:flex; align-items:center; justify-content:center;
+                    cursor:pointer; opacity:0.5; transition:opacity 0.3s;
+                    color:#fff; font-size:15px; user-select:none;"
+             onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">
+            &#x26F6;
+        </div>
+
+        <!-- MENU OVERLAY -->
+     <div id="sim-menu">
+    <button class="close-btn" onclick="toggleMenu()" style="margin-bottom:10px; background:#800;">CLOSE [X]</button>
+
+    <span class="section-label" style="color:#0f8">Sensors</span>
+    <div class="med-grid">
+        <button class="med-btn" id="btn-leads" onclick="toggleLeadsBtn()">Leads: OFF</button>
+        <button class="med-btn" id="btn-spo2sensor" onclick="toggleSpo2Btn()">SpO2 Sensor: OFF</button>
+        <button class="med-btn" id="btn-nibp" onclick="toggleNibpBtn()">NIBP Cuff: OFF</button>
+        <button class="med-btn" id="btn-etco2" onclick="toggleEtco2Btn()">EtCO2 Probe: OFF</button>
+    </div>
+
+    <span class="section-label" style="color:#ff4444">Defib Sound</span>
+    <div id="defib-profile-readout" style="color:#ccc; font-size:12px; font-family:sans-serif; background:#111; border:1px solid #444; border-radius:4px; padding:8px; margin-bottom:10px;">
+        Set from the remote's Defib Sound panel — currently: <b id="defib-profile-label">ZOLL</b>
+    </div>
+
+    <span class="section-label">Rhythm</span>
+    <select class="rhythm-select" onchange="setRhythm(this.value)" id="rhythm-select">
+        <optgroup label="Sinus">
+            <option value="NSR">Normal Sinus</option>
+            <option value="STA">Sinus Tachy</option>
+            <option value="SBRADY">Sinus Bradycardia</option>
+        </optgroup>
+        <optgroup label="Atrial / Junctional">
+            <option value="AFIB">Atrial Fibrillation</option>
+            <option value="AFL">Atrial Flutter</option>
+            <option value="SVT">SVT</option>
+            <option value="JUNCTIONAL">Junctional Rhythm</option>
+        </optgroup>
+        <optgroup label="AV Blocks">
+            <option value="AVB1">1st Degree AV Block</option>
+            <option value="WENCKEBACH">2nd Degree - Mobitz I (Wenckebach)</option>
+            <option value="MOBITZ2">2nd Degree - Mobitz II</option>
+            <option value="THIRD">3rd Degree (Complete) Block</option>
+        </optgroup>
+        <optgroup label="Ventricular">
+            <option value="BIGEMINY">Ventricular Bigeminy</option>
+            <option value="IVR">Idioventricular Rhythm</option>
+            <option value="VTACH">V-Tach</option>
+            <option value="VFIB">V-Fib</option>
+        </optgroup>
+        <optgroup label="Arrest / Other">
+            <option value="PEA">PEA (Pulseless Elec. Activity)</option>
+            <option value="ASY">Asystole</option>
+        </optgroup>
+    </select>
+
+    <span class="section-label" style="color:cyan">Pressors / Fluids</span>
+    <div class="med-grid">
+        <button class="med-btn" onclick="giveMed('Phenylephrine')">Phenyl</button>
+        <button class="med-btn" onclick="giveMed('Ephedrine')">Ephedrine</button>
+        <button class="med-btn" onclick="giveMed('Norepi')">Norepi</button>
+        <button class="med-btn" onclick="giveMed('Vaso')">Vaso</button>
+        <button class="med-btn" onclick="giveMed('Dopamine')">Dopamine</button>
+        <button class="med-btn" onclick="giveMed('Saline')">Saline</button>
+    </div>
+
+    <span class="section-label" style="color:orange">Induction / Sedation</span>
+    <div class="med-grid">
+        <button class="med-btn" onclick="giveMed('Propofol')">Propofol</button>
+        <button class="med-btn" onclick="giveMed('Etomidate')">Etomidate</button>
+        <button class="med-btn" onclick="giveMed('Ketamine')">Ketamine</button>
+        <button class="med-btn" onclick="giveMed('Fentanyl')">Fentanyl</button>
+        <button class="med-btn" onclick="giveMed('Benzo')">Benzo</button>
+        <button class="med-btn" onclick="giveMed('Precedex')">Precedex</button>
+    </div>
+
+    <span class="section-label" style="color:yellow">Paralytics / Reversal</span>
+    <div class="med-grid">
+        <button class="med-btn" onclick="giveMed('Sux')">Sux</button>
+        <button class="med-btn" onclick="giveMed('Roc')">Roc</button>
+        <button class="med-btn" onclick="giveMed('Vec')">Vec</button>
+        <button class="med-btn" onclick="giveMed('Sugammadex')">Sugamma</button>
+        <button class="med-btn" onclick="giveMed('Neostig')">Neostig</button>
+        <button class="med-btn" onclick="giveMed('Narcan')">Narcan</button>
+    </div>
+
+    <span class="section-label" style="color:pink">Cardiac / Emergency</span>
+    <div class="med-grid">
+        <button class="med-btn" onclick="giveMed('Epi')">Epi</button>
+        <button class="med-btn" onclick="giveMed('Atropine')">Atropine</button>
+        <button class="med-btn" onclick="giveMed('Amio')">Amio</button>
+        <button class="med-btn" onclick="giveMed('Lidocaine')">Lido</button>
+        <button class="med-btn" onclick="giveMed('Adenosine')">Adenosine</button>
+        <button class="med-btn" onclick="giveMed('Calcium')">Calcium</button>
+        <button class="med-btn" onclick="giveMed('Bicarb')">Bicarb</button>
+        <button class="med-btn" onclick="giveMed('Mag')">Mag</button>
+        <button class="med-btn" onclick="giveMed('Labetalol')">Labetalol</button>
+        <button onclick="performCPR()">START CPR</button>
+    </div>
+
+    <span class="section-label">Misc</span>
+    <div class="med-grid">
+        <button class="med-btn" onclick="setST(-6)">ST Elev</button>
+        <button class="med-btn" onclick="setST(8)">ST Depr</button>
+        <button class="med-btn" onclick="giveMed('Zosyn')">Zosyn</button>
+    </div>
+   <span class="section-label" style="color:cyan;">AIRWAY MANAGEMENT</span>
+    <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+        <div style="display:flex; gap:5px;">
+            <button class="med-btn" onclick="showLaryngoscopy()" style="flex:1; border-color:cyan;">Laryngoscopy</button>
+            <button class="med-btn" id="btn-vent" onclick="toggleVent()" style="flex:1; background:#004444; border-color:cyan;">START VENT</button>
+        </div>
+        <button class="med-btn" onclick="squeezeBag()" style="width:100%; background:#444400; border-color:yellow;">SQUEEZE BAG (Manual)</button>
+          <button class="med-btn" onclick="toggleO2Mask()" style="width:100%; background:#444400; border-color:yellow;">Mask</button>
+    </div>
+</div>
+
+        </div>
+
+    </div>
+
+
+    <script> 
+    const redAudio = new Audio('red.wav');
+const yellowAudio = new Audio('yellow.wav');
+
+redAudio.loop = false;
+yellowAudio.loop = false;
+// --- 1. GLOBAL STATE ---
+const state = {
+    on: false,
+    hr: 80, spo2: 98, rr: 18, abp: {s:120,d:80}, temp: 37.0, etco2: 38,
+    rhythm: 'NSR', silenced: false, lastBeat: 0, stShift: 0,
+    shocking: false, charging: false, messageOverride: false,
+    isPVC: false, willPVC: false, syncMode: false,
+    isVentilated: false,
+    // Monitor starts with no ECG leads or SpO2 probe attached — ECG/Pleth
+    // flatline and the HR/SpO2 numerics show "-?-" until the instructor
+    // attaches them (touch overlay on the waveform, or the Sensors toggle
+    // in the instructor menu). Same idea for the NIBP cuff and EtCO2
+    // sampling line.
+    leadsOn: false, spo2SensorOn: false, nibpCuffOn: false, etco2ProbeOn: false,
+
+    // Slow-moving "true" HR that natural beat-to-beat jitter (see
+    // vitalsJitter()) reverts toward, so small ±1 wobbles every ~10s
+    // don't accumulate into unrealistic drift. Quietly chases state.hr
+    // whenever something deliberately changes it (rhythm, drugs, vent),
+    // so jitter never fights a real intervention.
+    hrBaseline: 80,
+    cprQuality: 0,          // 0 → 1, decays if compressions pause
+    lastCompressionTime: 0,
+    // Tracks the current cardiac arrest "code" so defib/drug logic can
+    // reason about shock count, epi timing, and antiarrhythmics on board
+    // instead of just rolling dice with no memory of what's been done.
+    code: {
+        active: false,
+        startTime: null,
+        shockCount: 0,
+        epiCount: 0,
+        lastEpiTime: 0,
+        amioGiven: false,
+        lidocaineGiven: false,
+        magGiven: false,
+        bicarbGiven: false
+    },
+    // Scenario-specific "the right drug fixes this" flags, used so that
+    // Calcium/Bicarb (hyperkalemia) and Mag (torsades) actually matter
+    // rather than every drug just being a generic vital-sign nudge.
+    hyperKFlag: false,
+    hyperKTimeouts: [],
+    torsadesFlag: false,
+
+    // --- AV BLOCK / GROUPED-BEATING STATE ---
+    // blockBeatIndex counts beats within the current conduction group for
+    // Wenckebach (Mobitz I) and Mobitz II so we know when to lengthen the
+    // PR interval and when to drop a QRS. blockDropped marks the CURRENT
+    // cycle as a "P wave only, no QRS" beat (used by getVal + logic).
+    blockBeatIndex: 0,
+    blockDropped: false,
+    bigeminyIsPVCBeat: false
+};
+
+// A rhythm counts as an active "code" (no perfusing pulse) if it's VF,
+// asystole, PEA, or VT without a measurable pressure (pulseless VT).
+function isArrestRhythm() {
+    return state.rhythm === 'VFIB' || state.rhythm === 'ASY' || state.rhythm === 'PEA' ||
+           (state.rhythm === 'VTACH' && state.abp.s < 60);
+}
+
+// Call whenever the rhythm or pressure might have changed. Starts a fresh
+// code record the moment an arrest rhythm appears, and clears it (plus CPR
+// quality) the moment the patient has a perfusing rhythm again.
+function updateCodeState() {
+    const arrestNow = isArrestRhythm();
+    if (arrestNow && !state.code.active) {
+        state.code.active = true;
+        state.code.startTime = Date.now();
+        state.code.shockCount = 0;
+        state.code.epiCount = 0;
+        state.code.lastEpiTime = 0;
+        state.code.amioGiven = false;
+        state.code.lidocaineGiven = false;
+        state.code.bicarbGiven = false;
+    } else if (!arrestNow && state.code.active) {
+        state.code.active = false;
+        state.cprQuality = 0;
+        state.fakePulse = false;
+    }
+}
+
+// Real monitors never sit perfectly still on a number — HR/SpO2/RR/ABP
+// Real monitors never sit perfectly still — HR wobbles a beat or two even
+// in a stable patient. Runs on a randomized ~10 second cadence (not every
+// second — too fast reads as jittery/fake). HR gets a subtle ±1 nudge,
+// pulled back toward a slow-moving baseline so it wobbles around the
+// "true" value instead of drifting over minutes. SpO2 gets an occasional,
+// rare ±1 (real SpO2 is much steadier than HR). RR/EtCO2/ABP are left
+// alone entirely — those come from separate probes and don't need this.
+function vitalsJitter() {
+    if (state.on && state.rhythm !== 'ASY' && state.rhythm !== 'VFIB') {
+        if (state.hr > 0) {
+            state.hrBaseline += (state.hr - state.hrBaseline) * 0.3;
+            let next = state.hr + (Math.floor(Math.random() * 3) - 1); // -1, 0, or +1
+            next = Math.max(state.hrBaseline - 3, Math.min(state.hrBaseline + 3, next));
+            state.hr = Math.max(0, Math.round(next));
+        }
+
+        if (state.spo2 > 0 && Math.random() < 0.2) {
+            state.spo2 = Math.min(100, Math.max(0, state.spo2 + (Math.random() < 0.5 ? -1 : 1)));
+        }
+
+        updateNums();
+        checkAlarms();
+    }
+    scheduleVitalsJitter();
+}
+
+function scheduleVitalsJitter() {
+    // "10ish seconds" — randomized so it doesn't feel like a metronome.
+    const delay = 8000 + Math.random() * 5000;
+    setTimeout(vitalsJitter, delay);
+}
+
+const config = {
+    speed: 2,
+    waves: [
+        {id:'II', color:'#00FF00', base:0.15},
+                {id:'PLETH', color:'yellow', base:0.40},
+                {id:'ART', color:'#ff3333', base:0.70},
+                   {id:'CO2', color:'white', base:0.90}
+    ]
+};
+// --- 1. GLOBAL STATE ---
+
+
+
+// AUDIO GLOBALS
+let actx;
+let customAudio = null;
+let trendData = { hr: [], spo2: [] };
+let messageTimeout; 
+
+// ALARM SYSTEM GLOBALS (The Fix)
+let currentAlarmTier = 0;   // 0=None, 2=Yellow, 3=Red
+let alarmLoopID = null;     // The setInterval ID
+let activeAlarmOsc = null;  // The actual sound node
+
+// --- 2. SYSTEM STARTUP ---
+function powerOn() {
+    if(state.on) return;
+    state.on = true;
+    document.getElementById('off-overlay').style.display = 'none';
+    document.getElementById('led-ac').classList.add('led-on');
+    
+    const AC = window.AudioContext || window.webkitAudioContext;
+    actx = new AC();
+
+    initDisplay();
+    requestAnimationFrame(drawLoop);
+    setInterval(logic, 20); 
+    setInterval(clock, 1000);
+    setInterval(updateTrends, 1000);
+    scheduleVitalsJitter();
+    updateNums();
+
+    // Smart Audio Loop (Ambience)
+    setInterval(() => {
+        if (!state.on || state.silenced) return;
+        // Only play ambience if NO alarms are ringing (Tier 0)
+
+    }, 3500); 
+}
+
+function loadCustomSound(input) {
+    const file = input.files[0];
+    if(file) customAudio = new Audio(URL.createObjectURL(file));
+}
+
+// --- 3. ROBUST AUDIO ENGINE ---
+// --- ALARM BEEPS (The "Max Feinstein" Fix) ---
+  // --- 3. ROBUST AUDIO ENGINE ---
+function playTone(type) {
+    if (!state.on || !actx) return;
+    if (actx.state === 'suspended') actx.resume();
+
+    const now = actx.currentTime;
+
+    // --- QRS BEEP (Independent) ---
+    if (type === 'QRS') {
+        if (state.silenced) return;
+        if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') return;
+
+        let freq = 598 - ((100 - state.spo2) * 20);
+        if (state.rhythm === 'VTACH' || state.rhythm === 'SVT') freq = 400;
+
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.connect(gain);
+        gain.connect(actx.destination);
+
+        osc.frequency.setValueAtTime(freq, now);
+        osc.type = 'triangle';
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        osc.start(now);
+        osc.stop(now + 0.25);
+    }
+
+    // --- ALARM BEEPS ---
+    else if (type.startsWith('ALARM')) {
+        redAudio.pause();
+        redAudio.currentTime = 0;
+        yellowAudio.pause();
+        yellowAudio.currentTime = 0;
+
+        if (type === 'ALARM_RED') {
+            redAudio.play().catch(() => {});
+        } else if (type === 'ALARM_YELLOW') {
+            yellowAudio.play().catch(() => {});
+        }
+    }
+}
+function updateAlarmAudio(targetTier) {
+    // If silenced, force tier to 0 (No Audio)
+    if (state.silenced) targetTier = 0;
+
+    // If state hasn't changed, DO NOTHING. Let the loop run.
+    if (targetTier === currentAlarmTier) return;
+
+    // --- STATE CHANGED: RESET ---
+    // 1. Stop Loop
+    if (alarmLoopID) { clearInterval(alarmLoopID); alarmLoopID = null; }
+    // 2. Stop Sound
+    if (activeAlarmOsc) { try{activeAlarmOsc.stop();}catch(e){} activeAlarmOsc = null; }
+
+    currentAlarmTier = targetTier;
+
+    // --- START NEW STATE ---
+    if (targetTier === 3) {
+        // RED: Immediate play + Loop 2.5s
+        playTone('ALARM_RED'); 
+        alarmLoopID = setInterval(() => playTone('ALARM_RED'), 2500);
+    } 
+    else if (targetTier === 2) {
+        // YELLOW: Immediate play + Loop 4s
+        playTone('ALARM_YELLOW');
+        alarmLoopID = setInterval(() => playTone('ALARM_YELLOW'), 4000);
+    }
+}
+
+function playChargeSound(duration) {
+    if(!actx) return;
+    const t = actx.currentTime;
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    osc.connect(g); g.connect(actx.destination);
+    osc.type='sawtooth';
+    osc.frequency.setValueAtTime(400, t);
+    osc.frequency.exponentialRampToValueAtTime(3000, t + duration);
+    g.gain.setValueAtTime(0.25, t); 
+    g.gain.linearRampToValueAtTime(0, t + duration);
+    osc.start(t); osc.stop(t + duration);
+}
+
+function playLowTone() {
+    if(!actx) return;
+    const t = actx.currentTime;
+    const osc = actx.createOscillator();
+    const g = actx.createGain();
+    osc.connect(g); g.connect(actx.destination);
+    osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t);
+    const vol = 0.4;
+    [0, 0.4, 0.8].forEach(start => {
+        g.gain.setValueAtTime(0, t+start);
+        g.gain.linearRampToValueAtTime(vol, t+start+0.05);
+        g.gain.linearRampToValueAtTime(0, t+start+0.3);
+    });
+    osc.start(t); osc.stop(t+1.2);
+}
+
+function playMelody() {
+    if (!actx) return;
+    let t = actx.currentTime;
+    const note = (freq, dur, startTime) => {
+        const o = actx.createOscillator(); const g = actx.createGain();
+        o.type = "triangle"; o.frequency.value = freq;
+        o.connect(g); g.connect(actx.destination);
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+        o.start(startTime); o.stop(startTime + dur);
+    };
+    const C=523.25, F=698.46, G=783.99, A=880.00, B=987.77;
+    note(C, 0.12, t); t += 0.14; note(F, 0.12, t); t += 0.14;
+    note(G, 0.14, t); t += 0.25; note(A, 0.12, t); t += 0.14; note(B, 0.16, t);
+}
+function playMelodyB() {
+    if (!actx) return;
+    let t = actx.currentTime;
+    const note = (freq, dur, startTime) => {
+        const o = actx.createOscillator(); const g = actx.createGain();
+        o.type = "triangle"; o.frequency.value = freq;
+        o.connect(g); g.connect(actx.destination);
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+        o.start(startTime); o.stop(startTime + dur);
+    };
+    const C=523.25, F=698.46, G=783.99, A=880.00, B=987.77;
+    note(C, 0.12, t); t += 0.14;
+    note(G, 0.14, t); t += 0.25; 
+
+ t += 0.14; note(B, 0.16, t);
+}
+
+
+// --- 4. LOGIC ---
+function logic() {
+    if(!state.on) return;
+    const now = Date.now();
+    updateCodeState();
+    
+    if (state.isVentilated) {
+        // Driven by the real ventilator app's settings when connected
+        // (see the 'vent_state' case in applyRemoteCommand); falls back
+        // to sensible defaults if the vent app isn't hooked up yet.
+        const targetRR = state.ventRR || 14;
+        const tv = state.ventTV || 625;
+        if (Math.abs(state.rr - targetRR) > 1) state.rr += (state.rr < targetRR ? 1 : -1);
+        if (state.spo2 < 98) { if(Math.random() > 0.8) state.spo2++; }
+        if (state.spo2 > 100) state.spo2 = 100;
+        // Higher minute ventilation (TV * RR) blows off more CO2; lower
+        // minute ventilation retains it. 9.1 L/min ~= the 625ml/14bpm default.
+        const mv = (tv * (state.rr || targetRR)) / 1000;
+        const etco2Target = Math.min(60, Math.max(20, 38 * (9.1 / Math.max(mv, 1))));
+        state.etco2 += (etco2Target - state.etco2) * 0.02;
+    }
+
+    let ms = 60000 / (state.hr || 60);
+    if(state.rhythm === 'AFIB') ms += (Math.random()-0.5)*300;
+    if(state.rhythm === 'SVT') ms = 60000 / 180;
+    if(state.isPVC) ms *= 1.6; else if(state.willPVC) ms *= 0.6;
+
+    if(now - state.lastBeat > ms) {
+        state.lastBeat = now;
+        state.isPVC = false;
+
+        // --- GROUPED BEATING (2nd degree AV blocks) ---
+        // Every 4th beat in the group is a "dropped" QRS: the P wave still
+        // fires on schedule but no ventricular complex follows. getVal()
+        // uses blockDropped to skip drawing the QRS for this cycle.
+        if (state.rhythm === 'WENCKEBACH' || state.rhythm === 'MOBITZ2') {
+            state.blockBeatIndex = (state.blockBeatIndex + 1) % 4;
+            state.blockDropped = (state.blockBeatIndex === 3);
+        } else {
+            state.blockDropped = false;
+        }
+
+        // --- FORCED BIGEMINY ---
+        // Every other beat is a PVC, deterministically (real bigeminy is a
+        // fixed 1:1 pattern, not random ectopy).
+        if (state.rhythm === 'BIGEMINY') {
+            state.bigeminyIsPVCBeat = !state.bigeminyIsPVCBeat;
+            if (state.bigeminyIsPVCBeat) state.willPVC = true;
+        }
+
+        if (state.blockDropped) {
+            // P wave only this cycle — no QRS beep, no flash.
+        } else if(state.willPVC) {
+            state.isPVC=true; state.willPVC=false;
+            if (state.leadsOn) { playTone('QRS'); flashNum(); }
+        }
+        else {
+            if (state.leadsOn) { playTone('QRS'); flashNum(); }
+            if(state.rhythm === 'PVC' && Math.random()<0.25) state.willPVC=true;
+        }
+    }
+    checkAlarms();
+}
+
+function checkAlarms() {
+    if(state.messageOverride) return;
+
+    const b = document.getElementById('alarm-msg');
+    let activeAlarms = []; 
+    let highestTier = 0; // 0=None, 2=Yellow, 3=Red
+
+    // --- HELPER ---
+    const addAlarm = (text, tier) => {
+        activeAlarms.push(text);
+        if (tier > highestTier) highestTier = tier;
+    };
+
+    // --- SENSOR STATUS ---
+    if (!state.leadsOn) addAlarm("*** ECG LEADS OFF", 3);
+    if (!state.spo2SensorOn) addAlarm("** SpO2 SENSOR OFF", 2);
+    if (!state.etco2ProbeOn) addAlarm("** EtCO2 SENSOR OFF", 2);
+    if (!state.nibpCuffOn) addAlarm("* NIBP NO CUFF", 1);
+
+    // --- TIER 1: RED ---
+    if (state.rhythm === 'ASY')   addAlarm("*** ASYSTOLE", 3);
+    if (state.etco2 <35)   addAlarm("*** APNEA", 3);
+    if (state.rr<12)   addAlarm("*** avRR LOW", 2);
+     if (state.rr<12)   addAlarm("*** RR LOW", 2);
+      if (state.rr>20)   addAlarm("*** avRR HIGH", 2);
+      if (state.rr>20)   addAlarm("** RR HIGH", 2);
+    if (state.rhythm === 'VFIB')  addAlarm("*** V-FIB", 3);
+    if (state.rhythm === 'VTACH') addAlarm("*** V-TACH", 3);
+    if (state.rhythm === 'SVT')   addAlarm("*** SVT", 3);
+    if (state.rhythm === 'THIRD') addAlarm("*** COMPLETE HEART BLOCK", 3);
+    if (state.rhythm === 'PEA')   addAlarm("*** PEA - NO PULSE", 3);
+    if (state.spo2 < 85) addAlarm("*** DESAT", 3);
+    if (state.hr < 40 && state.hr > 0) addAlarm("*** EXTREME BRADY", 3);
+    
+    if (state.hr > 160) addAlarm("*** EXTREME TACHY", 3);
+    if (state.abp.s < 60 && state.abp.s > 5) addAlarm("*** EXTREME HYPOTENSION", 3);
+    if (state.abp.s > 220) addAlarm("*** EXTREME HYPERTENSION", 3);
+
+    // --- TIER 2: YELLOW ---
+    if (state.hr > 130 && state.hr <= 160) addAlarm("** HR HIGH", 2);
+       if (state.temp <34) addAlarm("*** tBLOOD LOW", 2);
+    if (state.hr > 120 && state.hr <= 160) addAlarm("** PULSE HIGH", 2);
+    if (state.hr <60 && state.hr <= 160) addAlarm("** HR LOW", 2);
+    if (state.hr <60 && state.hr <= 160) addAlarm("** PULSE LOW", 2);
+     if (state.hr < 55 && state.hr > 0) addAlarm("** BRADY", 2);
+        if (state.etco2 <35)   addAlarm("** etCO2 LOW", 2);
+            if (state.etco2 >40)   addAlarm("** etCO2 HIGH", 2);
+    if (state.hr < 50 && state.hr >= 40)   addAlarm("** LOW HEART RATE", 2);
+    if (state.spo2 < 90 && state.spo2 >= 85) addAlarm("** SpO2 LOW", 2);
+    if (state.etco2 > 50) addAlarm("** EtCO2 HIGH", 2);
+    if (state.etco2 < 25) addAlarm("** EtCO2 LOW", 2);
+    if (state.stShift <= -4) {
+    addAlarm("** ST LOW", 2);
+}
+else if (state.stShift >= 5) {
+    addAlarm("** ST HIGH", 2);
+}
+    if (state.rhythm === 'AFL') addAlarm("** IRREGULAR HR", 2);
+    if (state.rhythm === 'MOBITZ2') addAlarm("** MOBITZ II - HIGH RISK", 2);
+    if (state.rhythm === 'IVR') addAlarm("** IDIOVENTRICULAR RHYTHM", 2);
+    if (state.abp.s < 90 && state.abp.s >= 60)   addAlarm("** LOW BP", 2);
+    if (state.abp.s > 160 && state.abp.s <= 220) addAlarm("** HIGH BP", 2);
+
+    // --- TIER 3: CYAN (device-state notices only, not rhythm labels) ---
+    if (highestTier < 2) {
+        if (state.syncMode) addAlarm("SYNC MODE ACTIVE", 1);
+    }
+
+    // --- VISUAL DISPLAY ---
+    let displayMsg = "", displayClass = "alarm-banner";
+    if (activeAlarms.length === 0) {
+        displayMsg = "";
+        highestTier = 0; // Ensure audio stops
+    } else {
+        if (highestTier === 3) displayClass = "alarm-red";
+        else if (highestTier === 2) displayClass = "alarm-yellow";
+        else displayClass = "alarm-cyan";
+        const index = Math.floor(Date.now() / 2000) % activeAlarms.length;
+        displayMsg = activeAlarms[index];
+    }
+
+    if (state.silenced) {
+        displayMsg = "ALARM SILENCED";
+        if (highestTier === 3) displayClass = "alarm-red";
+        else if (highestTier === 2) displayClass = "alarm-yellow";
+    }
+
+    b.className = "alarm-banner " + displayClass;
+    b.innerText = displayMsg;
+
+    // --- AUDIO TRIGGER (THE FIX) ---
+    // Pass the calculated tier to the separate audio manager
+    updateAlarmAudio(highestTier);
+}
+
+// --- 5. WAVEFORMS ---
+const cvs = document.getElementById('waves');
+const ctx = cvs.getContext('2d');
+let w, h, scanX=0;
+
+function initDisplay() {
+    const c = document.getElementById('wave-container');
+    w = cvs.width = c.clientWidth;
+    h = cvs.height = c.clientHeight;
+    config.waves.forEach(wv => {
+        const l = document.createElement('div');
+        l.className='w-label'; l.innerText=wv.id;
+        l.style.color=wv.color; l.style.top=(wv.base*100-5)+'%';
+        c.appendChild(l);
+    });
+}
+
+function getVal(id, p) {
+    const n = (Math.random()-0.5)*2;
+
+    // No leads / no SpO2 probe attached yet — flatline those specific
+    // traces regardless of underlying rhythm (matches a real monitor
+    // showing "LEADS OFF" / "NO SENSOR" instead of a waveform).
+    if (id === 'II' && !state.leadsOn) return n;
+    if (id === 'PLETH' && !state.spo2SensorOn) return n;
+    if (id === 'CO2' && !state.etco2ProbeOn) return n;
+
+    if (state.shocking && (id === 'II' || id === 'I')) return (Math.random()>0.5 ? -250 : 250);
+
+    if (state.syncMode && id === 'II' && p > 0.40 && p < 0.41) {
+        if(!document.getElementById('dot-'+Math.floor(Date.now()/200))) drawSyncDot();
+    }
+
+    if (state.rhythm === 'ASY' || state.rhythm === 'VFIB') {
+        if (id === 'II') {
+            // ECG trace: flatline for asystole, chaotic fibrillatory waveform for VFib.
+            return state.rhythm === 'VFIB' ? Math.sin(Date.now()/50)*15+n*5 : n;
+        }
+        // PLETH / ABP / EtCO2 all flatline in both arrest rhythms — VFib produces
+        // no effective cardiac output, so there's no pulse waveform or perfusion-
+        // dependent capnogram even though the ECG itself is chaotic.
+        return n;
+    }
+
+    if (id === 'II') {
+        const noise = (Math.random() - 0.5) * 1.5;
+        if(state.isPVC) {
+            if (p < 0.15) return 60 * Math.sin(p * 6 * Math.PI) + noise;
+            if (p >= 0.15 && p < 0.5) return -20 * Math.sin((p - 0.15) * 3 * Math.PI) + noise;
+            return noise;
+        }
+       if (state.rhythm === 'VTACH') {
+    // compress waveform so it’s not stretched
+    let localP = p * 2; // faster cycle inside one beat
+    if (localP > 1) localP -= 1;
+
+    let wave = Math.sin(localP * Math.PI * 2);
+
+    // shape into wide QRS but not huge blobs
+    wave = Math.sign(wave) * Math.pow(Math.abs(wave), 0.5);
+
+    return wave * 30 + noise;
+}
+        if (state.rhythm === 'SVT') {
+            // Clean, tall, narrow-complex tachycardia — no discernible P wave,
+            // regular, compressed T. This is what a real unstable SVT looks
+            // like on the monitor (previously this had a distracting dip/notch).
+            let y = 0;
+            if (p > 0.35 && p < 0.45) {
+                if (p < 0.385) y = 8; else if (p < 0.415) y = -65; else y = 12;
+            } else if (p >= 0.45 && p < 0.58) {
+                y = -12 * Math.sin(((p - 0.45) / 0.13) * Math.PI);
+            }
+            return y + noise;
+        }
+        if (state.rhythm === 'AFL') {
+            const fr = 300; const fc = 60000/fr; const tf = (Date.now()%fc)/fc;
+            let flutter = tf<0.5 ? tf*20 : (1-tf)*20;
+            let qrs = 0; if (p>0.36 && p<0.44) { if(p<0.38) qrs=12; else if(p<0.41) qrs=-55; else qrs=12; }
+            return flutter + qrs + noise;
+        }
+        if (state.rhythm === 'IVR') {
+            // Idioventricular Rhythm: slow, wide ventricular escape complex, no P waves.
+            let localP = p * 1.6; if (localP > 1) localP -= 1;
+            let wave = Math.sin(localP * Math.PI * 2);
+            wave = Math.sign(wave) * Math.pow(Math.abs(wave), 0.6);
+            return wave * 26 + noise;
+        }
+        if (state.rhythm === 'THIRD') {
+            // Complete (3rd degree) AV block: P waves march to their own
+            // atrial rate, completely independent of the slow escape-rhythm
+            // QRS timing (which is driven by state.hr like every other rhythm).
+            const atrialRateBpm = 100;
+            const atrialCycleMs = 60000 / atrialRateBpm;
+            const ap = (Date.now() % atrialCycleMs) / atrialCycleMs;
+            let y = 0;
+            if (ap > 0.05 && ap < 0.20) y = -6 * Math.sin(((ap - 0.05) / 0.15) * Math.PI);
+            // Slightly widened escape QRS — the escape focus here is
+            // junctional/ventricular, not sinus.
+            if (p > 0.34 && p < 0.48) {
+                if (p < 0.38) y = 10; else if (p < 0.43) y = -55; else y = 12;
+            } else if (p >= 0.48 && p < 0.65) y = state.stShift;
+            else if (p >= 0.65 && p < 0.85) y = -8 * Math.sin(((p - 0.65) / 0.20) * Math.PI);
+            return y + noise;
+        }
+        if (state.rhythm === 'WENCKEBACH' || state.rhythm === 'MOBITZ2') {
+            // Grouped beating. Wenckebach (Mobitz I): PR lengthens each beat
+            // in the group (P moves progressively earlier) until one QRS is
+            // dropped. Mobitz II: PR stays fixed, QRS just drops abruptly.
+            // blockBeatIndex/blockDropped are advanced once per beat in logic().
+            let y = 0;
+            let pStart = 0.10, pEnd = 0.20;
+            if (state.rhythm === 'WENCKEBACH') {
+                const shift = state.blockBeatIndex * 0.045;
+                pStart = 0.14 - shift; pEnd = 0.22 - shift;
+            }
+            if (p > pStart && p < pEnd) y = -5 * Math.sin(((p - pStart) / (pEnd - pStart)) * Math.PI);
+            if (!state.blockDropped) {
+                if (p > 0.35 && p < 0.45) {
+                    if (p < 0.38) y = 10; else if (p < 0.42) y = -50; else y = 10;
+                } else if (p >= 0.45 && p < 0.6) y = state.stShift;
+                else if (p >= 0.6 && p < 0.8) y = -8 * Math.sin((p - 0.6) * 5 * Math.PI);
+            }
+            return y + noise;
+        }
+        let y = 0;
+        // Junctional rhythm: absent/retrograde P wave. 1st degree block: P wave
+        // is drawn separately below with a prolonged PR (moved earlier).
+        if (state.rhythm !== 'AFIB' && state.rhythm !== 'JUNCTIONAL' && state.rhythm !== 'AVB1' &&
+            p > 0.1 && p < 0.2) y = -5 * Math.sin((p - 0.1) * 10 * Math.PI);
+        if (state.rhythm === 'AVB1' && p > 0.02 && p < 0.12) y = -5 * Math.sin(((p - 0.02) / 0.10) * Math.PI);
+        if (p > 0.35 && p < 0.45) {
+            if (p < 0.38) y = 10; else if (p < 0.42) y = -50; else y = 10;
+        }
+        else if (p >= 0.45 && p < 0.6) y = state.stShift;
+        else if (p >= 0.6 && p < 0.8) y = -8 * Math.sin((p - 0.6) * 5 * Math.PI);
+        return y + noise;
+    }
+
+    // During VTach, non-ECG traces stay recognizable but get extra jitter —
+    // the patient still has some pulse/ventilation, just an unstable one —
+    // as opposed to VFib/asystole, where they flatline entirely (see above).
+    const vtachChaos = state.rhythm === 'VTACH' ? (Math.random() - 0.5) * 14 : 0;
+    const vtachAmpJitter = state.rhythm === 'VTACH' ? 1 + (Math.random() - 0.5) * 0.3 : 1;
+
+    if (id === 'CO2') {
+        const rr = state.rr || 18; const cd = 60000/rr; const tm = Date.now();
+        let rp = (tm % cd) / cd;
+        let y = 0, amp = 25;
+        if (rp < 0.4) y = 0;
+        else if (rp < 0.45) y = ((rp - 0.4) / 0.05) * amp;
+        else if (rp < 0.8) y = amp + ((rp - 0.45) * 5); 
+        else if (rp < 0.85) { const pk = amp + ((0.8 - 0.45) * 5); y = pk * (1 - ((rp - 0.8) / 0.05)); }
+        return -(y * vtachAmpJitter) + n + vtachChaos;
+    }
+
+    if(id==='PLETH'||id==='ART') {
+        let pp=p-0.2; if(pp<0) pp+=1;
+        let y=0;
+        if(pp<0.2) y=-30*Math.sin(pp*5*Math.PI/2);
+        else y=-30*Math.cos((pp-0.2)*2)*Math.exp(-(pp-0.2)*3);
+        y = y * vtachAmpJitter + vtachChaos;
+        if(id==='ART') return (y*1.2)+n;
+        return y+n;
+    }
+    if (id === 'CVP') {
+        let w1 = Math.sin(p * Math.PI * 2); let w2 = Math.sin((p + 0.1) * Math.PI * 4) * 0.6;
+        return -(w1 + w2) * 8 + n;
+    }
+    return 0;
+}
+
+function drawLoop() {
+    if(!state.on) return;
+    const cyc = 60000/(state.hr||60);
+    const raw = (Date.now()-state.lastBeat)/cyc;
+    const p = raw>1?1:raw;
+
+    ctx.clearRect(scanX,0,8,h);
+
+    config.waves.forEach(wv => {
+        const base = h*wv.base;
+        if(wv.prev===undefined) wv.prev=base;
+        let y = base + getVal(wv.id, p);
+        ctx.strokeStyle=wv.color; ctx.lineWidth=2;
+        ctx.beginPath();
+        if(scanX>0) ctx.moveTo(scanX-2, wv.prev); else ctx.moveTo(scanX,y);
+        ctx.lineTo(scanX, y); ctx.stroke();
+        wv.prev=y;
+    });
+
+    scanX+=2;
+    if(scanX>=w) { scanX=0; config.waves.forEach(wv=>wv.prev=undefined); }
+    requestAnimationFrame(drawLoop);
+}
+
+function drawSyncDot() {
+    const container = document.getElementById('wave-container');
+    const dot = document.createElement('div');
+    dot.className = 'sync-marker';
+    dot.id = 'dot-' + Math.floor(Date.now()/200);
+    dot.style.left = (scanX - 5) + 'px'; dot.style.top = '15%'; 
+    container.appendChild(dot);
+    setTimeout(() => dot.remove(), 2000);
+}
+
+// --- 6. CONTROLS ---
+function toggleMenu() {
+    const m = document.getElementById('sim-menu');
+    m.style.display = m.style.display==='block'?'none':'block';
+}
+function toggleSilence() { state.silenced = !state.silenced; checkAlarms(); }
+function toggleTrends() {
+    const t = document.getElementById('trend-overlay');
+    t.style.display = t.style.display === 'block' ? 'none' : 'block';
+    if(t.style.display === 'block') drawTrends();
+}
+function toggleVent() {
+    state.isVentilated = !state.isVentilated;
+    showBannerMessage(state.isVentilated ? "VENTILATOR CONNECTED" : "VENTILATOR DISCONNECTED");
+}
+function squeezeBag() {
+    showBannerMessage("BAGGING PATIENT...");
+
+    if (state.spo2 < 99) { state.spo2 += 3;
+
+setTimeout(() => {
+state.spo2-=3;
+updateNums();
+}, 5000);
+
+    
+    
+     if(state.spo2>100)state.spo2=100; }
+
+
+
+
+    
+    if (state.rr < 10) state.rr = 12;
+    updateNums();
+}
+function toggleO2Mask() {
+    state.isMaskOn = !state.isMaskOn; // Switch between true/false
+
+    if (state.isMaskOn) {
+        showBannerMessage("O2 MASK APPLIED");
+        // Create a loop that improves SpO2 every 2 seconds
+        state.o2Effect = setInterval(() => {
+            if (state.spo2 < 95) { // Mask usually caps lower than bagging
+                state.spo2 += 1;
+                updateNums();
+            }
+        }, 2000);
+    } else {
+        showBannerMessage("O2 MASK REMOVED");
+        clearInterval(state.o2Effect); // Stop the boost
+    }
+}
+
+
+// ============================================================
+// CROSS-MONITOR SYNC — keeps this MILOMONITOR display and the ZOLL sim
+// (defib.php) showing the same rhythm/vitals and hearing the same shocks,
+// no matter which device (or the remote) triggered the change. Uses a
+// distinct 'sync' action on state.php so it never collides with
+// remote.php's discrete trigger/med/scenario commands.
+// ============================================================
+const SOURCE_ID = 'monitor';
+let applyingSync = false;
+
+function broadcastSync(extra) {
+    const payload = Object.assign({
+        source: SOURCE_ID,
+        rhythm: state.rhythm,
+        hr: state.hr,
+        spo2: state.spo2,
+        rr: state.rr,
+        etco2: state.etco2,
+        abp: { s: state.abp.s, d: state.abp.d },
+        temp: state.temp
+    }, extra || {});
+    fetch(REMOTE_STATE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync', param: null, value: payload })
+    }).catch(() => {});
+}
+
+function setRhythm(r) {
+    state.rhythm = r; state.silenced = false; state.stShift = 0; state.isPVC = false; state.willPVC = false;
+    state.blockBeatIndex = 0; state.blockDropped = false; state.bigeminyIsPVCBeat = false;
+    document.getElementById('rhythm-select').value = r;
+
+    if (r === 'NSR' || r === 'PVC') { state.hr=80; state.spo2=98; state.rr=18; state.abp={s:120,d:80}; }
+    else if (r === 'AFIB') { state.hr=90; state.spo2=96; state.rr=18; state.abp={s:110,d:70}; }
+    else if (r === 'STA') { state.hr=140; state.spo2=99; state.rr=22; state.abp={s:130,d:75}; }
+    else if (r === 'SBRADY') { state.hr=48; state.spo2=97; state.rr=14; state.abp={s:105,d:65}; }
+    else if (r === 'VTACH') { state.hr=160; state.spo2=85; state.abp={s:90,d:50}; }
+    else if (r === 'VFIB' || r === 'ASY') { state.hr=0; state.spo2=0; state.rr=0; state.abp={s:0,d:0}; }
+ else if (r === 'SBY') { state.hr=0; state.spo2=0; state.rr=0; state.abp={s:0,d:0}; }
+    else if (r === 'AFL') { state.hr=150; state.spo2=96; state.rr=18; state.abp={s:110,d:70}; }
+    else if (r === 'SVT') { state.hr=180; state.spo2=96; state.rr=24; state.abp={s:95,d:55}; }
+    // --- Junctional: narrow QRS, absent/retrograde P, slow-ish intrinsic rate ---
+    else if (r === 'JUNCTIONAL') { state.hr=48; state.spo2=96; state.rr=16; state.abp={s:100,d:60}; }
+    // --- 1st Degree AV Block: normal narrow QRS, just a prolonged PR interval ---
+    else if (r === 'AVB1') { state.hr=72; state.spo2=97; state.rr=16; state.abp={s:118,d:76}; }
+    // --- Mobitz I (Wenckebach): grouped beating, progressively longer PR then a dropped QRS ---
+    else if (r === 'WENCKEBACH') { state.hr=60; state.spo2=96; state.rr=16; state.abp={s:110,d:70}; }
+    // --- Mobitz II: fixed PR, sudden dropped QRS (more dangerous — often progresses) ---
+    else if (r === 'MOBITZ2') { state.hr=50; state.spo2=94; state.rr=16; state.abp={s:100,d:62}; }
+    // --- 3rd Degree (Complete) Block: P waves and QRS totally dissociated, slow escape rhythm ---
+    else if (r === 'THIRD') { state.hr=36; state.spo2=92; state.rr=16; state.abp={s:88,d:54}; }
+    // --- Ventricular Bigeminy: every other beat is a PVC ---
+    else if (r === 'BIGEMINY') { state.hr=76; state.spo2=96; state.rr=16; state.abp={s:112,d:70}; }
+    // --- Idioventricular Rhythm: slow wide-complex ventricular escape, no P waves ---
+    else if (r === 'IVR') { state.hr=34; state.spo2=90; state.rr=14; state.abp={s:80,d:50}; }
+    // --- PEA: organized (often narrow) complex on the monitor, but no measurable pulse/pressure ---
+    else if (r === 'PEA') { state.hr=55; state.spo2=0; state.rr=0; state.abp={s:0,d:0}; }
+
+    // Re-center the HR jitter baseline immediately so the next jitter
+    // tick wobbles around the NEW rate instead of briefly fighting to
+    // drag it back toward wherever it was a moment ago.
+    state.hrBaseline = state.hr;
+
+    updateCodeState();
+    updateNums();
+    if (!applyingSync) broadcastSync();
+}
+
+function adjSpO2(c) {
+    state.spo2 += c;
+    if(state.spo2>100) state.spo2=100; if(state.spo2<0) state.spo2=0;
+    const menuEl = document.getElementById('count-el'); if(menuEl) menuEl.innerText=state.spo2;
+    updateNums(); checkAlarms();
+}
+function adjHr(c) {
+    state.hr += c;
+
+    const menuEl = document.getElementById('count-el'); if(menuEl) menuEl.innerText=state.hr;
+    updateNums(); checkAlarms();
+}
+function adjrr(c) {
+    state.rr += c;
+
+    const menuEl = document.getElementById('count-el'); if(menuEl) menuEl.innerText=state.rr;
+    updateNums(); checkAlarms();
+}
+function adjco2(c) {
+    state.etco2 += c;
+   
+    const menuEl = document.getElementById('count-el'); if(menuEl) menuEl.innerText=state.etco2;
+    updateNums(); checkAlarms();
+}
+function setST(val) { state.stShift = val; checkAlarms(); }
+function triggerPVC() { if(state.on) { state.lastBeat=Date.now(); state.isPVC=true; playTone('QRS'); flashNum(); } }
+function startNbp() {
+    const el = document.getElementById('b-nbp'); el.innerText="---/---"; el.style.color="#aaa";
+    setTimeout(()=>{ el.style.color=""; updateNums(); }, 5000);
+el.innerText=state.abp;
+}
+function adjABP(s_c, d_c) {
+    // Adjust values
+    state.abp.s += s_c;
+    state.abp.d += d_c;
+
+    // Safety bounds (Systolic max 300, Diastolic min 0)
+    if(state.abp.s > 300) state.abp.s = 300; 
+    if(state.abp.d < 0) state.abp.d = 0;
+    
+    // Logic check: Systolic must be greater than Diastolic
+    if(state.abp.s <= state.abp.d) state.abp.s = state.abp.d + 2;
+
+    // UI Update - Target the element where you display BP
+    const menuEl = document.getElementById('bp-el'); 
+    if(menuEl) menuEl.innerText = `${state.abp.s}/${state.abp.d}`;
+
+    updateNums(); 
+    checkAlarms();
+}
+// --- MEDICATION & PROCEDURES ---
+function showBannerMessage(text) {
+    state.messageOverride = true;
+    const b = document.getElementById('alarm-msg');
+    b.innerText = text;
+    b.className = "alarm-banner";
+    b.style.backgroundColor = "#e0e0e0"; b.style.color = "black";
+    if(messageTimeout) clearTimeout(messageTimeout);
+    messageTimeout = setTimeout(() => {
+        state.messageOverride = false;
+        b.style.backgroundColor = ""; b.style.color = "";
+        checkAlarms();
+    }, 5000);
+}
+function showLaryngoscopy() {
+    // Check if overlay exists
+    let overlay = document.getElementById('laryngoscopy-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'laryngoscopy-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.8)';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '2000';
+        overlay.style.padding = '20px';
+
+        // Create the image element
+        const img = document.createElement('img');
+        img.src = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSrXqnaHv6TtaLicltd_OAegr6i6zJfLm8f58Jqo5z0p93cD4xab457Pudndqw&s';
+        img.style.maxWidth = '80%';
+        img.style.maxHeight = '60%';
+        overlay.appendChild(img);
+
+// Inside showLaryngoscopy() function, replace the button creation with:
+const intubateBtn = document.createElement('button');
+intubateBtn.innerText = 'Perform Intubation';
+intubateBtn.style.marginTop = '20px';
+intubateBtn.style.padding = '10px 20px';
+intubateBtn.style.fontSize = '16px';
+intubateBtn.style.cursor = 'pointer';
+intubateBtn.onclick = () => {
+    toggleVent(); // Call toggleVent() on button click
+    overlay.remove(); // Close the overlay afterward
+};
+overlay.appendChild(intubateBtn);
+
+        // Add a close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = 'Close';
+        closeBtn.style.marginTop = '10px';
+        closeBtn.style.padding = '10px 20px';
+        closeBtn.style.fontSize = '16px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.onclick = () => overlay.remove();
+        overlay.appendChild(closeBtn);
+
+        document.body.appendChild(overlay);
+    }
+}
+
+function giveMed(med) {
+    showBannerMessage("ADMINISTERED: " + med.toUpperCase());
+    window.parent.postMessage({ type: 'MED_GIVEN', med: med }, '*');
+    
+    // --- SPECIAL CASE: ADENOSINE (CHEMICAL CARDIOVERSION) ---
+    if (med === 'Adenosine') {
+        if (!['SVT','VTACH','AFL','AFIB','NSR'].includes(state.rhythm)) return;
+        const old = state.rhythm; 
+        setRhythm('ASY'); // Flatline
+        setTimeout(() => { 
+            if(old==='VTACH') setRhythm('VTACH'); 
+            else setRhythm('NSR'); 
+        }, 4000);
+        return;
+    }
+
+    // --- HELPER: PHYSIOLOGICAL GRADIENT ---
+    // dHr: Change in HR, dSys: Systolic, dDia: Diastolic, dRr: Respirations, dSpo2: Oxygen, dTemp: Temp
+    // duration: How long the drug stays at peak before wearing off (ms)
+    const applyGradual = (dHr, dSys, dDia, dRr, dSpo2, dTemp=0, duration=120000) => {
+        const steps=200; const int=100;
+        const sHr=dHr/steps; const sSys=dSys/steps; const sDia=dDia/steps; 
+        const sRr=dRr/steps; const sSpo2=dSpo2/steps; const sTemp=dTemp/steps;
+        let c=0;
+
+        const tmr = setInterval(() => {
+            state.hr+=sHr; state.abp.s+=sSys; state.abp.d+=sDia; 
+            state.rr+=sRr; state.spo2+=sSpo2; state.temp+=sTemp;
+            
+            // Safety Clamps
+            if(state.hr < 0) state.hr = 0;
+            if(state.rr < 0) state.rr = 0;
+            if(state.spo2 > 100) state.spo2 = 100;
+            
+            updateNums(); checkAlarms();
+            c++;
+
+            if(c>=steps) {
+                clearInterval(tmr);
+                // Permanent drugs (Antibiotics/Saline) don't wear off
+                if(med !== 'Zosyn' && med !== 'Saline') {
+                    setTimeout(() => {
+                        let dc=0;
+                        const down = setInterval(()=>{
+                            if(state.rhythm!=='ASY' && state.rhythm!=='VFIB') {
+                                state.hr-=sHr; state.abp.s-=sSys; state.abp.d-=sDia; 
+                                state.rr-=sRr; state.spo2-=sSpo2; state.temp-=sTemp;
+                                updateNums(); checkAlarms();
+                            }
+                            dc++;
+                            if(dc>=steps) { 
+                                clearInterval(down); 
+                                showBannerMessage(med+" WORE OFF"); 
+                            }
+                        }, int);
+                    }, duration);
+                }
+            }
+        }, int);
+    };
+
+    // --- DRUG DATABASE ---
+    switch(med) {
+        // --- PRESSORS & INOTROPES ---
+        case 'Ephedrine': 
+            applyGradual(15, 20, 10, 0, 0); // Increases HR and BP
+            break;
+        case 'Phenylephrine': 
+            applyGradual(-10, 30, 15, 0, 0); // Increases BP but causes reflex Bradycardia
+            break;
+        case 'Norepi':
+            applyGradual(5, 40, 20, 0, 0);   // Strong BP increase, mild HR increase
+            break;
+        case 'Dopamine':
+            applyGradual(20, 30, 15, 0, 0);  // High dose: Tachycardia + Vasoconstriction
+            break;
+        case 'Epi':
+            if (isArrestRhythm()) {
+                // Epi raises coronary/cerebral perfusion pressure during CPR — it
+                // doesn't convert the rhythm by itself, but it meaningfully improves
+                // the odds that the next shock (or CPR alone, for PEA) achieves ROSC.
+                // See performDefib()'s roscChance calculation for how this is used.
+                state.code.epiCount++;
+                state.code.lastEpiTime = Date.now();
+                if (state.rhythm === 'PEA' && Math.random() < 0.10) {
+                    setRhythm('NSR');
+                    showBannerMessage("ROSC!");
+                }
+            } else {
+                applyGradual(30, 40, 20, 5, 0);
+            }
+            break;
+
+        // --- INDUCTION & SEDATION ---
+        case 'Propofol':
+            applyGradual(-15, -35, -20, -20, -10); // Massive drop in BP and Breathing
+            break;
+        case 'Ketamine':
+            applyGradual(15, 20, 10, 0, 0);  // Dissociative: Increases HR/BP
+            break;
+        case 'Etomidate':
+            applyGradual(0, -5, -5, -15, -5); // Hemodynamically stable induction
+            break;
+        case 'Opioid':
+        case 'Fentanyl':
+            let rrDrop = -12; 
+            if ((state.rr + rrDrop) < 4) rrDrop = -(state.rr - 4);
+            applyGradual(-5, -5, -5, rrDrop, -5);
+            break;
+        case 'Benzo':
+            applyGradual(-10, -10, -5, -6, 0);
+            break;
+
+        // --- PARALYTICS & REVERSAL ---
+        case 'Roc':
+        case 'Vec':
+        case 'Sux':
+            applyGradual(0, 0, 0, -30, -25); // Stops breathing
+            break;
+        case 'Sugammadex':
+            // Fast reversal of Roc/Vec
+            state.rr = 16; state.spo2 = 99;
+            showBannerMessage("REVERSAL SUCCESSFUL");
+            break;
+
+        // --- CARDIAC / EMERGENCY ---
+        case 'Atropine':
+            applyGradual(30, 5, 0, 0, 0);
+            break;
+        case 'Amio':
+        case 'Lidocaine':
+            if (isArrestRhythm() && (state.rhythm === 'VFIB' || state.rhythm === 'VTACH')) {
+                // Antiarrhythmics during a code don't convert the rhythm by
+                // themselves — they improve the odds the NEXT shock works.
+                // See performDefib()'s roscChance calculation.
+                if (med === 'Amio') state.code.amioGiven = true;
+                if (med === 'Lidocaine') state.code.lidocaineGiven = true;
+                showBannerMessage(med.toUpperCase() + " ON BOARD \u2014 SHOCK ADVISED");
+            } else if (['VTACH', 'VFIB'].includes(state.rhythm)) {
+                // Stable, perfusing VT (pulse present, not a code) — chemical
+                // conversion over a short infusion is reasonable here.
+                setTimeout(() => {
+                    if (['VTACH', 'VFIB'].includes(state.rhythm)) {
+                        setRhythm('NSR');
+                        showBannerMessage("ANTI-ARRHYTHMIC EFFECTIVE");
+                    }
+                }, 8000);
+            }
+            break;
+        case 'Mag':
+            if (state.torsadesFlag) {
+                // Magnesium is the specific treatment for Torsades — unlike
+                // Amio/Lidocaine, it reliably converts this rhythm on its own.
+                state.torsadesFlag = false;
+                setRhythm('NSR');
+                showBannerMessage("RHYTHM CONVERTED");
+            } else if (isArrestRhythm() && (state.rhythm === 'VFIB' || state.rhythm === 'VTACH')) {
+                state.code.magGiven = true;
+                showBannerMessage("MAG ON BOARD \u2014 SHOCK ADVISED");
+            } else if (['VTACH', 'VFIB'].includes(state.rhythm)) {
+                setTimeout(() => {
+                    if (['VTACH', 'VFIB'].includes(state.rhythm)) {
+                        setRhythm('NSR');
+                        showBannerMessage("ANTI-ARRHYTHMIC EFFECTIVE");
+                    }
+                }, 8000);
+            }
+            break;
+        case 'Calcium':
+            applyGradual(-2, 10, 5, 0, 0); // Slight BP boost, membrane stabilization
+            if (state.hyperKFlag) {
+                state.hyperKFlag = false;
+                if (state.hyperKTimeouts && state.hyperKTimeouts.length) {
+                    state.hyperKTimeouts.forEach(clearTimeout);
+                }
+                state.hyperKTimeouts = [];
+                showBannerMessage("MEMBRANE STABILIZED");
+            }
+            break;
+        case 'Bicarb':
+            state.code.bicarbGiven = true;
+            if (state.hyperKFlag) {
+                state.hyperKFlag = false;
+                if (state.hyperKTimeouts && state.hyperKTimeouts.length) {
+                    state.hyperKTimeouts.forEach(clearTimeout);
+                }
+                state.hyperKTimeouts = [];
+                state.hr = Math.max(state.hr, 65);
+                showBannerMessage("ACIDOSIS CORRECTING");
+                updateNums(); checkAlarms();
+            } else {
+                showBannerMessage("BICARB ON BOARD");
+            }
+            break;
+        case 'Nipride':
+            applyGradual(5, -50, -25, 0, 0); // Massive vasodilation
+            break;
+        case 'Metop':
+        case 'Labetalol':
+            applyGradual(-20, -20, -10, 0, 0); // Drop HR and BP
+            break;
+
+        // --- FLUIDS & MISC ---
+        case 'Saline':
+            applyGradual(-5, 15, 10, 0, 0, -0.5); 
+            break;
+        case 'Narcan':
+            applyGradual(10, 10, 5, 15, 10); // Reverses opioid effects
+            break;
+        case 'Zosyn':
+            showBannerMessage("ANTIBIOTICS INFUSING...");
+            setTimeout(() => {
+                if (state.rhythm === 'ASY' || state.rhythm === 'VFIB') return;
+                applyGradual(0, 5, 5, 0, 0, -1.5); // Drops temp (fever)
+                if(state.rhythm === 'STA') setRhythm('NSR');
+            }, 30000);
+            break;
+
+        default:
+            console.log("Medication effect not defined: " + med);
+            break;
+    }
+}
+
+function performCardioversion() {
+    if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        playTone('ALARM'); showBannerMessage("SYNC FAILURE: NO R-WAVE"); return;
+    }
+    state.syncMode = true; 
+    document.getElementById('sync-msg').style.display = 'block';
+    showBannerMessage("SYNCING... STAND CLEAR");
+    
+    setTimeout(() => {
+        playTone('ALARM'); state.shocking = true;
+        setTimeout(() => {
+            state.shocking = false; state.syncMode = false; document.getElementById('sync-msg').style.display='none';
+            if (['SVT', 'VTACH', 'AFIB', 'AFL', 'STA'].includes(state.rhythm)) {
+                if(Math.random() > 0.1) { setRhythm('NSR'); showBannerMessage("CONVERSION SUCCESSFUL"); }
+                else showBannerMessage("FAILED");
+            } else if (state.rhythm === 'NSR') {
+                if(Math.random() > 0.8) { setRhythm('VFIB'); showBannerMessage("R-ON-T INDUCED"); }
+            }
+        }, 250);
+    }, 800);
+}
+
+// ============================================================
+// DEFIB SOUND — three selectable instructor profiles:
+//   ZOLL:    WebAudio flat tones, 5400Hz while charging -> 2800Hz ready
+//   Philips: WebAudio flat tones,  335Hz while charging ->  491Hz ready
+//   LIFEPAK: plays shock.mp3 (real recorded audio) instead of synthesized
+//            tones — falls back to the ZOLL-style discharge crack if the
+//            file can't be played (e.g. not hosted alongside this file).
+// Instructor picks the profile from the Sensors/Defib Sound menu; it's
+// stored in defibProfile and read by performDefib() below.
+// ============================================================
+const DEFIB_PROFILES = {
+    zoll:    { chargeHz: 5400, readyHz: 2800, useFile: false },
+    philips: { chargeHz: 335,  readyHz: 491,  useFile: false },
+    lifepak: { chargeHz: null, readyHz: null, useFile: true, file: 'shock.mp3' }
+};
+let defibProfile = 'zoll';
+
+// Only the remote can change this now — monitor.html just reflects the
+// current selection (see applyRemoteCommand's 'defib_profile' case below)
+// so it never drifts from what the instructor picked on the remote.
+function setDefibProfile(p) {
+    if (!DEFIB_PROFILES[p]) return;
+    defibProfile = p;
+    const label = document.getElementById('defib-profile-label');
+    if (label) label.innerText = p.toUpperCase();
+    showBannerMessage('DEFIB SOUND: ' + p.toUpperCase());
+}
+
+let defibToneOsc = null, defibToneGain = null;
+
+function ensureDefibAudio() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+}
+
+function startFlatTone(freq) {
+    ensureDefibAudio();
+    stopFlatTone();
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(0.0001, actx.currentTime);
+    g.gain.linearRampToValueAtTime(0.15, actx.currentTime + 0.05);
+    o.start();
+    defibToneOsc = o; defibToneGain = g;
+}
+
+function stopFlatTone() {
+    if (defibToneOsc) {
+        try {
+            defibToneGain.gain.linearRampToValueAtTime(0.0001, actx.currentTime + 0.05);
+            defibToneOsc.stop(actx.currentTime + 0.08);
+        } catch (e) {}
+        defibToneOsc = null; defibToneGain = null;
+    }
+}
+
+function playShockDischargeSound() {
+    ensureDefibAudio();
+    const t = actx.currentTime;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.connect(g); g.connect(actx.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(35, t + 0.35);
+    g.gain.setValueAtTime(0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.start(t); o.stop(t + 0.4);
+
+    const bufSize = actx.sampleRate * 0.08;
+    const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+    const noise = actx.createBufferSource();
+    noise.buffer = buf;
+    const ng = actx.createGain();
+    ng.gain.setValueAtTime(0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    const nf = actx.createBiquadFilter();
+    nf.type = 'bandpass'; nf.frequency.value = 1200;
+    noise.connect(nf); nf.connect(ng); ng.connect(actx.destination);
+    noise.start(t); noise.stop(t + 0.08);
+}
+
+// Plays the discharge sound for whichever profile is currently selected —
+// LIFEPAK plays the real shock.mp3 file, everything else uses the
+// synthesized sweep+crack above.
+function playShockSoundForProfile() {
+    const profile = DEFIB_PROFILES[defibProfile] || DEFIB_PROFILES.zoll;
+    if (profile.useFile) {
+        const audio = new Audio(profile.file);
+        audio.play().catch(() => playShockDischargeSound());
+    } else {
+        playShockDischargeSound();
+    }
+}
+
+function performDefib() {
+    if (state.shocking || state.charging) return;
+
+    updateCodeState();
+    const shockable = state.rhythm === 'VFIB' ||
+        (state.rhythm === 'VTACH' && isArrestRhythm());
+
+    const deliver = () => {
+        state.shocking = true;
+        stopFlatTone();
+        playShockSoundForProfile();
+
+        setTimeout(() => {
+            state.shocking = false;
+
+            if (shockable) {
+                state.code.shockCount++;
+
+                const elapsedMin = state.code.startTime
+                    ? (Date.now() - state.code.startTime) / 60000
+                    : 0;
+
+                // CPR only helps if compressions are actually recent — a good
+                // cprQuality score that's stale (compressions stopped) shouldn't
+                // still be counted as "currently perfusing".
+                const compressionsRecent = (Date.now() - (state.lastCompressionTime || 0)) < 8000;
+                const effectiveCprQuality = compressionsRecent ? state.cprQuality : state.cprQuality * 0.3;
+
+                // Epi improves coronary/cerebral perfusion pressure for a few
+                // minutes after each dose, then fades.
+                const minutesSinceEpi = state.code.lastEpiTime
+                    ? (Date.now() - state.code.lastEpiTime) / 60000
+                    : 99;
+                const epiBoost = state.code.epiCount > 0
+                    ? Math.max(0, 0.10 - minutesSinceEpi * 0.03)
+                    : 0;
+
+                // Antiarrhythmics don't convert the rhythm by themselves — they
+                // make the NEXT shock more likely to succeed.
+                let antiarrhythmicBoost = 0;
+                if (state.code.amioGiven) antiarrhythmicBoost += 0.12;
+                if (state.code.lidocaineGiven) antiarrhythmicBoost += 0.08;
+                if (state.code.magGiven) antiarrhythmicBoost += 0.05;
+                if (state.code.bicarbGiven) antiarrhythmicBoost += 0.03;
+
+                // Repeated shocks on a well-perfused, well-supported arrest do
+                // help (each defibrillation slightly improves the odds), but
+                // prolonged downtime works against you.
+                const shockCountBoost = Math.min(state.code.shockCount * 0.02, 0.10);
+                const downtimePenalty = Math.min(elapsedMin * 0.025, 0.20);
+
+                let roscChance = 0.15 + (effectiveCprQuality * 0.25) + epiBoost + antiarrhythmicBoost
+                    + shockCountBoost - downtimePenalty;
+                roscChance = Math.min(Math.max(roscChance, 0.05), 0.70);
+
+                let asyChance = Math.min(0.04 + elapsedMin * 0.02, 0.22);
+                let peaChance = 0.12;
+
+                const total = roscChance + asyChance + peaChance;
+                const rand = Math.random() * total;
+
+                if (rand < roscChance) {
+                    setRhythm('NSR');
+                    showBannerMessage("ROSC ACHIEVED");
+                    // updateCodeState() (called inside setRhythm) will close out
+                    // the code record automatically now that the rhythm perfuses.
+                } else if (rand < roscChance + asyChance) {
+                    setRhythm('ASY');
+                    showBannerMessage("DETERIORATED \u2192 ASYSTOLE");
+                } else if (rand < roscChance + asyChance + peaChance) {
+                    setRhythm('PEA');
+                    showBannerMessage("PEA \u2014 RESUME CPR");
+                } else {
+                    showBannerMessage("NO CHANGE \u2014 CONTINUE CPR");
+                }
+                updateNums(); checkAlarms();
+
+            } else if (state.rhythm === 'ASY') {
+                showBannerMessage("NO EFFECT (ASYSTOLE)");
+            } else {
+                // Shocking a non-shockable, perfusing rhythm is not indicated
+                // and carries a real (if small) risk of inducing VF (R-on-T).
+                showBannerMessage("RHYTHM NOT SHOCKABLE");
+                if (Math.random() > 0.85) {
+                    setRhythm('VFIB');
+                    showBannerMessage("R-ON-T \u2014 DETERIORATED TO VFIB");
+                }
+            }
+
+            // Let the ZOLL sim (or any other connected monitor) know a shock
+            // was physically delivered here, regardless of whether the
+            // rhythm changed, so it can play the discharge crack in sync
+            // instead of only picking up on a rhythm change.
+            if (!applyingSync) broadcastSync({ shock: true });
+        }, 300);
+    };
+
+    // Charge sequence: flat charging tone -> flat ready tone (per the
+    // selected profile), followed automatically by the shock — MILOMONITOR's
+    // Defib key is a single "charge + shock" action rather than a separate
+    // Charge/Shock pair. LIFEPAK skips the synthesized tones (its shock.mp3
+    // captures the sound itself) but keeps the same overall timing so the
+    // physiology and UI stay in step with the other profiles.
+    const profile = DEFIB_PROFILES[defibProfile] || DEFIB_PROFILES.zoll;
+    state.charging = true;
+    ensureDefibAudio();
+    showBannerMessage("CHARGING...");
+    if (!profile.useFile) startFlatTone(profile.chargeHz);
+    setTimeout(() => {
+        state.charging = false;
+        if (!profile.useFile) startFlatTone(profile.readyHz);
+        showBannerMessage("CHARGED \u2014 READY");
+        setTimeout(deliver, 400);
+    }, 2200);
+}
+// Generic, non-diagnostic banner shown whenever a new case loads.
+// Deliberately does NOT name the underlying condition — the whole point
+// of a sim case is for the learner to arrive at the diagnosis themselves
+// from the vitals/rhythm/trend, not read it off the monitor.
+const NEW_CASE_MSG = "NEW PATIENT — BEGIN ASSESSMENT";
+
+function runScenario(val) {
+    if (!val) return;
+    state.stShift = 0;
+    state.messageOverride = false; // Reset banner state
+    state.hyperKFlag = false;
+    state.torsadesFlag = false;
+    if (state.hyperKTimeouts && state.hyperKTimeouts.length) {
+        state.hyperKTimeouts.forEach(clearTimeout);
+    }
+    state.hyperKTimeouts = [];
+    
+    if (val === 'SCENARIO_SVT') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('SVT'); state.abp = { s: 70, d: 40 }; state.spo2 = 92; state.rr = 28; 
+    }
+    else if (val === 'SCENARIO_OD') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 50; state.rr = 4; state.spo2 = 78; state.abp = { s: 90, d: 50 }; 
+    }
+    else if (val === 'SCENARIO_MI') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); setST(8); state.hr = 110; state.abp = { s: 100, d: 60 }; 
+        setTimeout(() => { 
+            if(state.rhythm === 'NSR') { 
+                playTone('ALARM'); setRhythm('VTACH'); 
+                state.abp = { s: 60, d: 30 }; state.spo2 = 80; 
+                setTimeout(() => { if(state.rhythm === 'VTACH') setRhythm('VFIB'); }, 15000); 
+            } 
+        }, 10000); 
+    }
+    else if (val === 'SCENARIO_CA') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('VFIB'); state.abp = { s: 0, d: 0 }; 
+    }
+    else if (val === 'SCENARIO_SEPSIS') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('STA'); state.hr = 135; state.temp = 39.8; state.abp = { s: 82, d: 45 }; state.spo2 = 91; state.rr = 30; 
+    }
+    else if (val === 'SCENARIO_ANAPHYLAXIS') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('STA'); state.hr = 138; state.abp = { s: 68, d: 35 }; state.spo2 = 86; state.rr = 32; 
+    }
+    else if (val === 'SCENARIO_HYPOVOLEMIA') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('STA'); state.hr = 145; state.abp = { s: 80, d: 50 }; state.spo2 = 98; state.rr = 24; 
+    }
+    else if (val === 'SCENARIO_CUSHING') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 42; state.abp = { s: 220, d: 110 }; state.spo2 = 96; state.rr = 8; 
+    }
+    else if (val === 'SCENARIO_BRADY') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 32; state.abp = { s: 78, d: 40 }; state.spo2 = 94; state.rr = 16; 
+    }
+    else if (val === 'SCENARIO_TORSADES') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        state.torsadesFlag = true;
+        setRhythm('VTACH'); state.hr = 220; state.abp = { s: 60, d: 30 }; state.spo2 = 88; 
+    }
+    else if (val === 'SCENARIO_HTN') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 88; state.abp = { s: 260, d: 140 }; state.spo2 = 98; 
+    }
+    else if (val === 'SCENARIO_BENZO') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 65; state.rr = 6; state.spo2 = 89; state.abp = { s: 100, d: 60 }; 
+    }
+    else if (val === 'SCENARIO_AFIB_RVR') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('AFIB'); state.hr = 170; state.abp = { s: 88, d: 50 }; state.spo2 = 94; 
+    }
+    else if (val === 'SCENARIO_MH') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('STA'); state.hr = 155; state.etco2 = 68; state.temp = 39.4; state.abp = { s: 100, d: 60 }; 
+    }
+    else if (val === 'SCENARIO_AIR_EMBOLISM') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('STA'); state.hr = 130; state.etco2 = 12; state.spo2 = 85; state.abp = { s: 60, d: 35 }; 
+    }
+    else if (val === 'SCENARIO_LAST') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('VTACH'); state.hr = 180; state.abp = { s: 160, d: 90 }; 
+        setTimeout(() => { if(state.rhythm === 'VTACH') setRhythm('ASY'); }, 15000); 
+    }
+    else if (val === 'SCENARIO_HIGH_SPINAL') { 
+        showBannerMessage(NEW_CASE_MSG); 
+        setRhythm('NSR'); state.hr = 38; state.abp = { s: 55, d: 30 }; state.rr = 0; state.spo2 = 88; state.etco2 = 50; 
+    }
+    else if (val === 'SCENARIO_STORM') {
+        showBannerMessage(NEW_CASE_MSG);
+        // PHASE 1: Initial Arrest (at 5 seconds)
+        setTimeout(() => {
+            showBannerMessage("!!! VENTRICULAR FIBRILLATION !!!");
+            setRhythm('VFIB');
+        }, 5000);
+
+        // PHASE 2: First Recurrence (at 40 seconds)
+        setTimeout(() => {
+            if (state.on) {
+                showBannerMessage("RE-ARREST: 1ST RECURRENCE");
+                setRhythm('VFIB');
+                if(!state.silenced) playTone('ALARM_RED');
+            }
+        }, 40000);
+
+        // PHASE 3: Refractory Period (at 80 seconds)
+        setTimeout(() => {
+            if (state.on) {
+                showBannerMessage("RE-ARREST: REFRACTORY V-FIB");
+                setRhythm('VFIB');
+                state.abp = { s: 0, d: 0 };
+            }
+        }, 80000);
+
+        // PHASE 4: The "V-Tach" warning (at 120 seconds)
+        setTimeout(() => {
+            if (state.on) {
+                showBannerMessage("RHYTHM DEGENERATING...");
+                setRhythm('VTACH'); state.hr = 210;
+                setTimeout(() => {
+                    if(state.rhythm === 'VTACH') {
+                        showBannerMessage("RE-ARREST: 3RD RECURRENCE");
+                        setRhythm('VFIB');
+                    }
+                }, 7000);
+            }
+        }, 120000);
+
+        // PHASE 5: The Last Wave (at 170 seconds)
+        setTimeout(() => {
+            if (state.on) {
+                showBannerMessage("CRITICAL: INTRACTABLE V-FIB");
+                setRhythm('VFIB');
+            }
+        }, 170000);
+    }
+    else if (val === 'SCENARIO_TENSION_PTX') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 136; state.spo2 = 88; state.rr = 34; state.abp = { s: 86, d: 56 }; state.etco2 = 30;
+        // Untreated, progresses to obstructive shock and arrest.
+        setTimeout(() => {
+            if (state.on && state.rhythm === 'STA' && state.spo2 < 92) {
+                showBannerMessage("VITALS DETERIORATING");
+                state.abp = { s: 55, d: 35 }; state.spo2 = 76; state.hr = 150;
+            }
+        }, 25000);
+        setTimeout(() => {
+            if (state.on && state.spo2 < 80) {
+                setRhythm('ASY'); showBannerMessage("CARDIOVASCULAR COLLAPSE");
+            }
+        }, 50000);
+    }
+    else if (val === 'SCENARIO_PE') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 128; state.spo2 = 85; state.rr = 30; state.abp = { s: 82, d: 52 }; state.etco2 = 18;
+        setTimeout(() => {
+            if (state.on && state.rhythm === 'STA') {
+                setRhythm('ASY'); state.abp = { s: 0, d: 0 };
+                showBannerMessage("SUDDEN CARDIOVASCULAR COLLAPSE");
+            }
+        }, 45000);
+    }
+    else if (val === 'SCENARIO_DKA') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 118; state.rr = 32; state.spo2 = 97; state.abp = { s: 95, d: 55 }; state.temp = 37.3;
+    }
+    else if (val === 'SCENARIO_HYPERK') {
+        showBannerMessage(NEW_CASE_MSG);
+        state.hyperKFlag = true;
+        setRhythm('NSR'); state.hr = 38; state.abp = { s: 85, d: 50 }; state.spo2 = 95; state.rr = 14;
+        // Untreated, degenerates into a wide-complex rhythm and arrest.
+        // Calcium/Bicarb cancel this progression — see giveMed().
+        const hyperKT1 = setTimeout(() => {
+            if (state.on && state.hyperKFlag && state.hr < 45) {
+                setRhythm('VTACH'); state.hr = 150;
+                showBannerMessage("WIDE COMPLEX RHYTHM");
+                const hyperKT2 = setTimeout(() => {
+                    if (state.on && state.hyperKFlag && state.rhythm === 'VTACH') setRhythm('VFIB');
+                }, 15000);
+                state.hyperKTimeouts.push(hyperKT2);
+            }
+        }, 30000);
+        state.hyperKTimeouts.push(hyperKT1);
+    }
+    else if (val === 'SCENARIO_HYPOGLYCEMIA') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 112; state.spo2 = 97; state.rr = 20; state.abp = { s: 100, d: 62 }; state.temp = 36.4;
+    }
+    else if (val === 'SCENARIO_AFE') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 150; state.spo2 = 75; state.rr = 32; state.abp = { s: 60, d: 35 }; state.etco2 = 22;
+        setTimeout(() => {
+            if (state.on && state.rhythm === 'STA') {
+                setRhythm('VFIB'); state.abp = { s: 0, d: 0 };
+                showBannerMessage("SUDDEN ARREST");
+            }
+        }, 25000);
+    }
+    else if (val === 'SCENARIO_TAMPONADE') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 132; state.abp = { s: 82, d: 68 }; state.spo2 = 92; state.rr = 26; state.etco2 = 30;
+    }
+    else if (val === 'SCENARIO_THYROID_STORM') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 162; state.temp = 40.3; state.abp = { s: 150, d: 70 }; state.spo2 = 94; state.rr = 28;
+    }
+    else if (val === 'SCENARIO_MYXEDEMA') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('NSR'); state.hr = 38; state.temp = 33.4; state.abp = { s: 80, d: 50 }; state.rr = 8; state.spo2 = 87;
+    }
+    else if (val === 'SCENARIO_LARYNGOSPASM') {
+        showBannerMessage(NEW_CASE_MSG);
+        setRhythm('STA'); state.hr = 125; state.rr = 0; state.spo2 = 90; state.etco2 = 5;
+        // Progressive desaturation from ongoing airway obstruction until relieved.
+        const dropInterval = setInterval(() => {
+            if (!state.on || state.rhythm === 'ASY' || state.rhythm === 'VFIB') { clearInterval(dropInterval); return; }
+            if (state.spo2 > 60 && state.rr === 0) {
+                state.spo2 -= 2; updateNums(); checkAlarms();
+            } else {
+                clearInterval(dropInterval);
+            }
+        }, 2000);
+        setTimeout(() => {
+            if (state.on && state.spo2 < 70) {
+                state.hr = 45; showBannerMessage("BRADYCARDIC FROM HYPOXEMIA");
+                updateNums(); checkAlarms();
+            }
+        }, 20000);
+    }
+    
+    updateNums();
+}
+
+function updateNums() {
+    const el = (id, v) => { if(document.getElementById(id)) document.getElementById(id).innerText = v; };
+    const fmt = (n) => Math.round(n);
+    el('b-temp', state.temp.toFixed(1));
+    el('skey-spo2-val', fmt(state.spo2));
+
+    // --- HR (ECG-derived, gated on leads being attached) ---
+    if (!state.leadsOn) {
+        el('val-hr', '-?-');
+        el('p-val', 0);
+    } else if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        // Show CPR-driven pulse if active
+        if (state.fakePulse) {
+            el('val-hr', Math.round(state.hr));
+            el('p-val', Math.round(state.hr));
+        } else {
+            el('val-hr', "0");
+            el('p-val', 0);
+        }
+    } else {
+        el('val-hr', fmt(state.hr));
+        el('p-val', fmt(state.hr));
+    }
+
+    // --- SpO2 (gated on probe being attached) ---
+    if (!state.spo2SensorOn) {
+        el('val-spo2', '-?-');
+    } else if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        el('val-spo2', '?');
+    } else {
+        el('val-spo2', fmt(state.spo2));
+    }
+
+    // --- EtCO2 / awRR (capnography, gated on etco2ProbeOn) ---
+    if (!state.etco2ProbeOn) {
+        el('val-co2', '-?-');
+        el('val-rr', '-?-');
+    } else if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        el('val-co2', fmt(state.etco2));
+        el('val-rr', 0);
+    } else {
+        el('val-co2', fmt(state.etco2));
+        el('val-rr', fmt(state.rr));
+    }
+
+    // --- ABP (arterial line — unaffected by any of the above sensors) ---
+    if (state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        el('val-abp', '10/--');
+    } else {
+        el('val-abp', `${fmt(state.abp.s)}/${fmt(state.abp.d)}`);
+    }
+
+    // --- NIBP (cuff, gated on nibpCuffOn) ---
+    if (!state.nibpCuffOn || state.rhythm === 'VFIB' || state.rhythm === 'ASY') {
+        el('b-nbp', '---/---');
+        el('b-map', '(--)');
+    } else if (state.rhythm === 'VTACH') {
+        el('b-nbp', '60/40'); el('b-map', '(47)');
+    } else {
+        el('b-nbp', '120/80'); el('b-map', '(93)');
+    }
+}
+
+// --- SENSOR ATTACH / DETACH (ECG leads, SpO2 probe, NIBP cuff, EtCO2 probe) ---
+function setLeadsOn(on) {
+    state.leadsOn = on;
+    const ov = document.getElementById('leads-overlay');
+    if (ov) ov.style.display = on ? 'none' : 'flex';
+    const btn = document.getElementById('btn-leads');
+    if (btn) btn.innerText = 'Leads: ' + (on ? 'ON' : 'OFF');
+    if (on) showBannerMessage('ECG LEADS ATTACHED');
+    updateNums(); checkAlarms();
+}
+function setSpo2SensorOn(on) {
+    state.spo2SensorOn = on;
+    const ov = document.getElementById('spo2-wave-overlay');
+    if (ov) ov.style.display = on ? 'none' : 'flex';
+    const btn = document.getElementById('btn-spo2sensor');
+    if (btn) btn.innerText = 'SpO2 Sensor: ' + (on ? 'ON' : 'OFF');
+    if (on) showBannerMessage('SpO2 SENSOR ATTACHED');
+    updateNums(); checkAlarms();
+}
+function setNibpOn(on) {
+    state.nibpCuffOn = on;
+    const ov = document.getElementById('nibp-overlay');
+    if (ov) ov.style.display = on ? 'none' : 'flex';
+    const btn = document.getElementById('btn-nibp');
+    if (btn) btn.innerText = 'NIBP Cuff: ' + (on ? 'ON' : 'OFF');
+    if (on) showBannerMessage('NIBP CUFF ATTACHED');
+    updateNums(); checkAlarms();
+}
+function setEtco2On(on) {
+    state.etco2ProbeOn = on;
+    const ov = document.getElementById('etco2-overlay');
+    if (ov) ov.style.display = on ? 'none' : 'flex';
+    const btn = document.getElementById('btn-etco2');
+    if (btn) btn.innerText = 'EtCO2 Probe: ' + (on ? 'ON' : 'OFF');
+    if (on) showBannerMessage('EtCO2 PROBE ATTACHED');
+    updateNums(); checkAlarms();
+}
+function attachLeads() { if (!state.leadsOn) setLeadsOn(true); }
+function attachSpo2() { if (!state.spo2SensorOn) setSpo2SensorOn(true); }
+function attachNibp() { if (!state.nibpCuffOn) setNibpOn(true); }
+function attachEtco2() { if (!state.etco2ProbeOn) setEtco2On(true); }
+function toggleLeadsBtn() { setLeadsOn(!state.leadsOn); }
+function toggleSpo2Btn() { setSpo2SensorOn(!state.spo2SensorOn); }
+function toggleNibpBtn() { setNibpOn(!state.nibpCuffOn); }
+function toggleEtco2Btn() { setEtco2On(!state.etco2ProbeOn); }
+
+function updateTrends() {
+    trendData.hr.push(state.hr);
+    trendData.spo2.push(state.spo2);
+    if(trendData.hr.length > 50) { trendData.hr.shift(); trendData.spo2.shift(); }
+    if(document.getElementById('trend-overlay').style.display==='block') drawTrends();
+}
+
+function drawTrends() {
+    const tCvs = document.getElementById('trendCanvas');
+    if(!tCvs) return;
+    const tCtx = tCvs.getContext('2d');
+    tCtx.clearRect(0,0, tCvs.width, tCvs.height);
+    
+    tCtx.strokeStyle = '#00ff00'; tCtx.beginPath();
+    trendData.hr.forEach((val, i) => {
+        let x = (i/50)*tCvs.width; let y = tCvs.height - (val/220*tCvs.height);
+        if(i===0) tCtx.moveTo(x,y); else tCtx.lineTo(x,y);
+    });
+    tCtx.stroke();
+
+    tCtx.strokeStyle = '#00ffff'; tCtx.beginPath();
+    trendData.spo2.forEach((val, i) => {
+        let x = (i/50)*tCvs.width; let y = tCvs.height - (val/100*tCvs.height);
+        if(i===0) tCtx.moveTo(x,y); else tCtx.lineTo(x,y);
+    });
+    tCtx.stroke();
+}
+
+function flashNum() {
+    const e = document.getElementById('val-hr');
+    if(e) { e.style.color = '#00FF00'; setTimeout(()=>e.style.color='', 100); }
+}
+
+     function clock() {
+            const d = new Date();
+            document.getElementById('clock').innerText = d.getHours().toString().padStart(2,'0')+":"+d.getMinutes().toString().padStart(2,'0');
+        }
+function toggleFS() {
+    if (!document.fullscreenElement) {
+        // Request fullscreen for the entire document
+        document.documentElement.requestFullscreen()
+            .catch(err => {
+                console.error(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+    } else {
+        // Exit fullscreen mode
+        document.exitFullscreen();
+    }
+}
+document.addEventListener('fullscreenchange', () => {
+    const btn = document.getElementById('fs-btn');
+    if (btn) btn.innerHTML = document.fullscreenElement ? '&#x2715;' : '&#x26F6;';
+});
+
+// Attach the toggle function to a button's click event
+// Example: If the rhythm is Asystole or VFib, tell the vent it's a Cardiac Arrest
+function notifyVentOfArrest() {
+    const ventFrame = document.querySelector('iframe'); // Adjust selector as needed
+    if (ventFrame) {
+        ventFrame.contentWindow.postMessage({ 
+            type: 'CMD_CRASH_ETCO2' 
+        }, '*');
+    }
+}
+
+// Hook this into your existing rhythm logic
+const originalSetRhythm = setRhythm;
+setRhythm = function(r) {
+    originalSetRhythm(r);
+    if (r === 'ASY' || r === 'VFIB') {
+        notifyVentOfArrest();
+    }
+};
+window.addEventListener('message', (e) => {
+    if (e.data.type === 'VENT_UPDATE') {
+        state.rr = e.data.rr;
+        state.etco2 = e.data.etco2;
+        updateNums(); // Ensure your UI updates with these new values
+    }
+});
+let calcValue = '0';
+
+function toggleCalculator() {
+    const wrapper = document.getElementById('calcWrapper');
+    wrapper.classList.toggle('active');
+}
+
+function updateCalcUI() {
+    document.getElementById('calc-display').innerText = calcValue;
+}
+
+function pushCalc(val) {
+    if (calcValue === '0' && val !== '.') {
+        calcValue = val;
+    } else {
+        calcValue += val;
+    }
+    updateCalcUI();
+}
+
+function clearCalc() {
+    calcValue = '0';
+    updateCalcUI();
+}
+
+function delCalc() {
+    calcValue = calcValue.slice(0, -1) || '0';
+    updateCalcUI();
+}
+
+function runCalc() {
+    try {
+        // Using Function() instead of eval() for safety
+        calcValue = String(new Function('return ' + calcValue)());
+    } catch (e) {
+        calcValue = 'Error';
+    }
+    updateCalcUI();
+}
+// Add this inside the <script> tag in anepro.html
+// 1. ADD THIS TO YOUR GLOBAL LOGIC LOOP (Inside logic() or a new setInterval)
+setInterval(() => {
+    if (window.opener) {
+        window.opener.postMessage({
+            type: 'MONITOR_FEEDBACK',
+            state: {
+                hr: state.hr,
+                spo2: state.spo2,
+                abp: state.abp,
+                rhythm: state.rhythm
+            }
+        }, '*');
+    }
+}, 500); // Send state every 500ms
+
+// Add this to your existing logic() function or near the top of your script
+setInterval(() => {
+    if (window.opener) {
+        window.opener.postMessage({
+            type: 'MONITOR_FEEDBACK',
+            state: {
+                hr: state.hr,
+                spo2: state.spo2,
+                abp: state.abp,
+                rhythm: state.rhythm
+            }
+        }, '*');
+    }
+}, 500);
+function performCPR() {
+    state.cprQuality = Math.min(state.cprQuality + 0.15, 1);
+    state.lastCompressionTime = Date.now();
+
+    showBannerMessage("CPR IN PROGRESS (" + Math.round(state.cprQuality * 100) + "%)");
+
+    // Generate a fake CPR-driven pulse if there's no real perfusing rhythm.
+    if (isArrestRhythm()) {
+        state.hr = 90 + Math.floor(Math.random() * 20); // 90–110 CPR rate
+        state.fakePulse = true;
+        state.abp.s = 80 + Math.random() * 20;
+        state.abp.d = 35 + Math.random() * 10;
+    }
+
+    // Asystole can organize into PEA with ongoing compressions.
+    if (state.rhythm === 'ASY' && Math.random() < 0.10) {
+        setRhythm('PEA');
+    }
+
+    // High-quality CPR + a recent dose of epi occasionally achieves ROSC from
+    // PEA on its own, without needing a shock (PEA isn't a shockable rhythm).
+    if (state.rhythm === 'PEA' && state.cprQuality > 0.6 && state.code.epiCount > 0) {
+        const minutesSinceEpi = (Date.now() - state.code.lastEpiTime) / 60000;
+        if (minutesSinceEpi < 4 && Math.random() < 0.06) {
+            setRhythm('NSR');
+            state.hr = 75; state.abp = { s: 92, d: 58 };
+            showBannerMessage("ROSC ACHIEVED");
+        }
+    }
+
+    updateNums();
+    checkAlarms();
+}
+
+setInterval(() => {
+    // Compressions decay whether or not we're mid-code; only matters while
+    // an arrest rhythm is active.
+    const compressionsStale = (Date.now() - (state.lastCompressionTime || 0)) > 3000;
+    if (compressionsStale) {
+        state.cprQuality = Math.max(state.cprQuality - 0.02, 0);
+    }
+
+    if (state.cprQuality < 0.1 && isArrestRhythm()) {
+        state.fakePulse = false;
+        state.hr = 0;
+        state.abp = { s: 0, d: 0 };
+        updateNums();
+    }
+}, 1000);
+
+// Replace your current message listener with this one
+// --- PRO CONTROLLER INTEGRATION ---
+
+// --- MULTI-TAB COMMUNICATION LOGIC ---
+const monitorChannel = new BroadcastChannel('milo_simulation');
+
+monitorChannel.onmessage = (event) => {
+    const data = event.data;
+    console.log("Remote Command Received:", data);
+
+    if (data.type === 'UPDATE_VITAL') {
+        state[data.param] = data.value;
+        // If updating HR, ensure pulse sounds/animations sync
+        updateNums(); 
+    }
+
+    if (data.type === 'SET_RHYTHM') {
+        setRhythm(data.value);
+    }
+
+    if (data.type === 'TRIGGER') {
+        switch(data.action) {
+            case 'PVC': 
+                state.willPVC = true; 
+                break;
+            case 'ST_UP': 
+                state.stShift = -8; 
+                break;
+            case 'ST_DOWN': 
+                state.stShift = 8; 
+                break;
+            case 'RESET': 
+                location.reload(); 
+                break;
+        }
+    }
+};
+
+// --- PHP REMOTE CONTROL (AJAX POLLING) ---
+// Polls state.php once a second for new commands queued by remote.php.
+// Only processes a command once (tracked via command_id) so it never
+// fights with the local physiology/drug simulation between polls.
+const REMOTE_STATE_URL = 'state.php';
+let lastRemoteCommandId = 0;
+let remoteConnected = false;
+
+function setRemoteIndicator(connected) {
+    if (connected === remoteConnected) return;
+    remoteConnected = connected;
+    let badge = document.getElementById('remote-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'remote-badge';
+        badge.style.fontSize = '11px';
+        badge.style.padding = '2px 6px';
+        badge.style.borderRadius = '3px';
+        badge.style.marginLeft = '8px';
+        badge.style.fontFamily = 'sans-serif';
+        const clockEl = document.getElementById('clock');
+        clockEl.parentNode.insertBefore(badge, clockEl);
+    }
+    badge.innerText = connected ? 'REMOTE' : '';
+    badge.style.background = connected ? '#0077be' : 'transparent';
+    badge.style.color = connected ? 'white' : 'transparent';
+}
+
+function applyRemoteCommand(cmd) {
+    if (!cmd) return;
+    switch (cmd.type) {
+        case 'set_vital': {
+            const v = parseFloat(cmd.value);
+            if (isNaN(v)) break;
+            if (cmd.param === 'hr') state.hr = v;
+            else if (cmd.param === 'spo2') state.spo2 = v;
+            else if (cmd.param === 'rr') state.rr = v;
+            else if (cmd.param === 'abp_s') state.abp.s = v;
+            else if (cmd.param === 'abp_d') state.abp.d = v;
+            else if (cmd.param === 'temp') state.temp = v;
+            else if (cmd.param === 'etco2') state.etco2 = v;
+            updateNums(); checkAlarms();
+            break;
+        }
+        case 'set_rhythm':
+            setRhythm(cmd.value);
+            break;
+        case 'trigger':
+            if (cmd.value === 'PVC') state.willPVC = true;
+            else if (cmd.value === 'ST_UP') state.stShift = -8;
+            else if (cmd.value === 'ST_DOWN') state.stShift = 8;
+            else if (cmd.value === 'CARDIOVERT') performCardioversion();
+            else if (cmd.value === 'DEFIB') performDefib();
+            else if (cmd.value === 'CPR') performCPR();
+            else if (cmd.value === 'SILENCE') toggleSilence();
+            else if (cmd.value === 'POWER_ON') powerOn();
+            checkAlarms();
+            break;
+        case 'med':
+            giveMed(cmd.value);
+            break;
+        case 'scenario':
+            runScenario(cmd.value);
+            break;
+        case 'reset':
+            location.reload();
+            break;
+        case 'defib_profile':
+            setDefibProfile(cmd.value);
+            break;
+        case 'vent_state': {
+            // The vent app (vent.php) is the source of truth for whether
+            // the patient is actually being ventilated and at what
+            // settings — logic()'s isVentilated block above reads
+            // ventRR/ventTV to target the right RR/EtCO2.
+            const v = cmd.value || {};
+            state.isVentilated = !!v.on;
+            if (typeof v.tv === 'number') state.ventTV = v.tv;
+            if (typeof v.rr === 'number') state.ventRR = v.rr;
+            showBannerMessage(state.isVentilated ? "VENTILATOR CONNECTED" : "VENTILATOR DISCONNECTED");
+            updateNums(); checkAlarms();
+            break;
+        }
+        case 'sync': {
+            const v = cmd.value || {};
+            // Ignore our own broadcasts coming back around the long-poll loop.
+            if (v.source === SOURCE_ID) break;
+
+            applyingSync = true;
+            if (typeof v.rhythm === 'string' && v.rhythm !== state.rhythm) {
+                // Adopt the rhythm label directly rather than calling
+                // setRhythm() (which would reset hr/spo2/etc to that
+                // rhythm's DEFAULTS and clobber the exact snapshot values
+                // the other monitor is sending us).
+                state.rhythm = v.rhythm;
+                state.silenced = false; state.stShift = 0; state.isPVC = false; state.willPVC = false;
+                state.blockBeatIndex = 0; state.blockDropped = false; state.bigeminyIsPVCBeat = false;
+                const rs = document.getElementById('rhythm-select');
+                if (rs) rs.value = v.rhythm;
+                updateCodeState();
+            }
+            if (typeof v.hr === 'number') state.hr = v.hr;
+            if (typeof v.spo2 === 'number') state.spo2 = v.spo2;
+            if (typeof v.rr === 'number') state.rr = v.rr;
+            if (typeof v.etco2 === 'number') state.etco2 = v.etco2;
+            if (v.abp && typeof v.abp.s === 'number') state.abp = { s: v.abp.s, d: v.abp.d };
+            if (typeof v.temp === 'number') state.temp = v.temp;
+            // Re-center the HR jitter baseline to whatever the other
+            // monitor just told us, same reasoning as in setRhythm().
+            state.hrBaseline = state.hr;
+            if (v.shock) {
+                playShockDischargeSound();
+            }
+            if (v.message) showBannerMessage(v.message);
+            updateNums(); checkAlarms();
+            applyingSync = false;
+            break;
+        }
+    }
+}
+
+// Long-poll loop: each request hangs on the server until a new command
+// arrives (or ~25s passes), then we immediately re-issue the request.
+// This delivers remote commands the instant they're sent instead of
+// waiting for the next fixed polling tick.
+let remoteRetryDelayMs = 500;
+
+async function longPollRemoteState() {
+    try {
+        const res = await fetch(
+            `${REMOTE_STATE_URL}?wait=1&since=${lastRemoteCommandId}&t=${Date.now()}`,
+            { cache: 'no-store' }
+        );
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const data = await res.json();
+        setRemoteIndicator(true);
+        remoteRetryDelayMs = 500; // reset backoff on success
+
+        if (data && typeof data.command_id !== 'undefined' && data.command_id !== lastRemoteCommandId) {
+            lastRemoteCommandId = data.command_id;
+            applyRemoteCommand(data.command);
+        }
+
+        longPollRemoteState(); // immediately reconnect for the next command
+    } catch (err) {
+        setRemoteIndicator(false);
+        // Back off a bit on failure so a down server doesn't spin us in a tight loop.
+        setTimeout(longPollRemoteState, remoteRetryDelayMs);
+        remoteRetryDelayMs = Math.min(remoteRetryDelayMs * 2, 8000);
+    }
+}
+
+async function initRemotePoll() {
+    try {
+        const res = await fetch(REMOTE_STATE_URL + '?t=' + Date.now(), { cache: 'no-store' });
+        const data = await res.json();
+        // Establish a baseline: don't replay whatever command was last queued
+        // before this monitor connected (e.g. from a previous session).
+        lastRemoteCommandId = (data && data.command_id) || 0;
+        setRemoteIndicator(true);
+    } catch (err) {
+        setRemoteIndicator(false);
+    }
+    longPollRemoteState();
+}
+
+initRemotePoll();
+
+    </script>
+</body>
+</html>
